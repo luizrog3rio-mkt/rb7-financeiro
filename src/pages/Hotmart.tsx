@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Upload, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
-import { parseHotmartCSV, vendaAprovada } from '../lib/hotmart'
+import { parseHotmartCSV } from '../lib/hotmart'
 import { fmtBRL, fmtData, primeiroDiaMes, ultimoDiaMes } from '../lib/format'
 import type { HotmartSale } from '../lib/types'
-import { Card, PageHeader, Vazio, ErroBanner, inputCls, btnPrimario } from '../components/ui'
+import { Card, PageHeader, Vazio, ErroBanner, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 
 // Etapa 6 — Conciliação Hotmart. Port do Hotmart.tsx do rb7 pra hotmart_sales.
 // Feature 100% exclusiva do rb7 (não existia no app antigo). Upsert por
@@ -18,23 +18,43 @@ export default function Hotmart() {
   const [msg, setMsg] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [importando, setImportando] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
   const [mesFiltro, setMesFiltro] = useState('') // YYYY-MM
+  const [totais, setTotais] = useState({ qtd: 0, bruto: 0, taxas: 0, afiliados: 0, liquido: 0 })
 
   useEffect(() => {
     if (empresas.length && !empresaDestino) setEmpresaDestino(empresaAtiva?.id ?? empresas[0].id)
   }, [empresas, empresaAtiva, empresaDestino])
 
   const carregar = useCallback(async () => {
-    let q = supabase.from('hotmart_sales').select('*').order('sale_date', { ascending: false }).limit(500)
-    if (empresaAtiva) q = q.eq('company_id', empresaAtiva.id)
+    setErro(null)
+    let pStart: string | null = null
+    let pEnd: string | null = null
     if (mesFiltro) {
       const [y, m] = mesFiltro.split('-').map(Number)
       const base = new Date(y, m - 1, 1)
-      q = q.gte('sale_date', primeiroDiaMes(base)).lte('sale_date', ultimoDiaMes(base))
+      pStart = primeiroDiaMes(base)
+      pEnd = ultimoDiaMes(base)
     }
+    // tabela: 300 vendas mais recentes (o PostgREST limita a 1000 mesmo)
+    let q = supabase.from('hotmart_sales').select('*').order('sale_date', { ascending: false }).limit(300)
+    if (empresaAtiva) q = q.eq('company_id', empresaAtiva.id)
+    if (pStart) q = q.gte('sale_date', pStart).lte('sale_date', pEnd!)
     const { data, error } = await q
     if (error) { setErro('Erro ao carregar vendas: ' + error.message); return }
     setVendas((data as HotmartSale[]) ?? [])
+
+    // KPIs: agregados no banco (corretos a qualquer volume)
+    const { data: tot, error: e2 } = await supabase.rpc('hotmart_totals', {
+      p_company: empresaAtiva?.id ?? null,
+      p_start: pStart,
+      p_end: pEnd,
+    })
+    if (e2) { setErro('Erro nos totais: ' + e2.message); return }
+    const t = tot?.[0]
+    setTotais(t
+      ? { qtd: Number(t.qtd), bruto: Number(t.bruto), taxas: Number(t.taxas), afiliados: Number(t.afiliados), liquido: Number(t.liquido) }
+      : { qtd: 0, bruto: 0, taxas: 0, afiliados: 0, liquido: 0 })
   }, [empresaAtiva, mesFiltro])
 
   useEffect(() => { carregar() }, [carregar])
@@ -69,16 +89,22 @@ export default function Hotmart() {
     carregar()
   }
 
-  const totais = useMemo(() => {
-    const aprovadas = vendas.filter((v) => vendaAprovada(v.status))
-    return {
-      qtd: aprovadas.length,
-      bruto: aprovadas.reduce((s, v) => s + Number(v.gross_amount), 0),
-      taxas: aprovadas.reduce((s, v) => s + Number(v.hotmart_fee), 0),
-      afiliados: aprovadas.reduce((s, v) => s + Number(v.affiliate_commission) + Number(v.coproduction_commission), 0),
-      liquido: aprovadas.reduce((s, v) => s + Number(v.net_amount), 0),
-    }
-  }, [vendas])
+  // Sincronização direta via API (Edge Function hotmart-sync) — sem CSV.
+  // Janela de ~2 meses por clique (produto de alto volume).
+  const sincronizar = async () => {
+    if (!empresaDestino) { setMsg('Selecione a empresa de destino.'); return }
+    setSincronizando(true)
+    setMsg(null)
+    setErro(null)
+    const { data, error } = await supabase.functions.invoke('hotmart-sync', {
+      body: { company_id: empresaDestino, months: 2 },
+    })
+    setSincronizando(false)
+    if (error) { setErro('Erro na sincronização: ' + error.message); return }
+    if (data?.error) { setErro('Hotmart: ' + (data.detalhe || data.error)); return }
+    setMsg(`Sincronizado · ${data.encontradas} vendas no período · ${data.gravadas} gravadas/atualizadas (${data.janela_meses} meses).`)
+    carregar()
+  }
 
   return (
     <div>
@@ -99,9 +125,13 @@ export default function Hotmart() {
               </select>
             </div>
           )}
-          <label className={btnPrimario + ' cursor-pointer'}>
+          <button onClick={sincronizar} disabled={sincronizando} className={btnPrimario}>
+            <RefreshCw size={16} className={sincronizando ? 'animate-spin' : ''} />
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar com a Hotmart'}
+          </button>
+          <label className={btnSecundario + ' cursor-pointer'} title="Importar um CSV exportado da Hotmart (alternativa à sincronização)">
             <Upload size={16} />
-            {importando ? 'Importando…' : 'Importar CSV da Hotmart'}
+            {importando ? 'Importando…' : 'CSV'}
             <input
               type="file"
               accept=".csv,.CSV,.txt"
@@ -161,7 +191,7 @@ export default function Hotmart() {
                 </tr>
               </thead>
               <tbody>
-                {vendas.map((v) => (
+                {vendas.slice(0, 300).map((v) => (
                   <tr key={v.id} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-4 py-2.5 whitespace-nowrap text-slate-600">{fmtData(v.sale_date)}</td>
                     <td className="px-4 py-2.5 text-slate-800">{v.product}</td>
@@ -178,6 +208,11 @@ export default function Hotmart() {
                 ))}
               </tbody>
             </table>
+            {totais.qtd > vendas.length && (
+              <p className="text-xs text-slate-400 text-center py-3 border-t border-slate-100">
+                Mostrando as {vendas.length} vendas mais recentes. Os totais acima consideram todas as {totais.qtd} aprovadas do período. Use o filtro de mês para ver outros períodos.
+              </p>
+            )}
           </div>
         )}
       </Card>
