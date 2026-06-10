@@ -10,7 +10,7 @@ import Lancamentos from './pages/Lancamentos'
 import Extrato from './pages/Extrato'
 import Hotmart from './pages/Hotmart'
 import Dashboard from './pages/Dashboard'
-import EmConstrucao from './pages/EmConstrucao'
+import Categorias from './pages/Categorias'
 
 function Rotas() {
   const { session, carregando } = useApp()
@@ -37,7 +37,7 @@ function Rotas() {
         <Route path="/extrato" element={<Extrato />} />
         <Route path="/hotmart" element={<Hotmart />} />
         <Route path="/contas" element={<Contas />} />
-        <Route path="/categorias" element={<EmConstrucao titulo="Categorias" etapa="etapa 8" />} />
+        <Route path="/categorias" element={<Categorias />} />
       </Route>
     </Routes>
   )
