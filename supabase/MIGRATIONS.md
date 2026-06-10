@@ -1,4 +1,4 @@
-# Migrations — runbook (Fase 1a ✅ aplicada · Fase 1b ✅ aplicada)
+# Migrations — runbook (Fase 1a ✅ · Fase 1b ✅ · Fase 1c 🟡 aguardando aprovação)
 
 > **Status: APLICADO em 2026-06-10 (SQL revisado e aprovado pelo Luiz em 2026-06-09).**
 > Histórico vivo: `20260609120000 baseline` (registrado sem execução) → `20260610010051 phase1a_hardening`
@@ -283,3 +283,100 @@ full-project do backup.
 - **Updates otimistas sem leitura de `error`** (setCategory,
   updatePurchaseItem, attachSelectedPending): com 2+ membros simultâneos a UI
   pode "mentir" até o próximo reload. Sem corrupção — melhoria de UX.
+
+---
+
+# Fase 1c — tabelas novas em inglês
+
+> **Status: SQL redigido em 2026-06-10, aguardando revisão e aprovação do Luiz.**
+> Arquivo: `migrations/20260610200000_phase1c_new_tables.sql` (placeholder — renomear
+> pós-apply, rito padrão). Fonte: as 3 migrations do rb7-financeiro + mapa da auditoria
+> cruzada, recuperados do transcript/Lixeira em 2026-06-10 e **versionados em
+> `supabase/audit/rb7-recovery/`** (insumo também das Fases 3 e 4).
+> Verificação adversarial: 6 agentes, 39 achados, **0 blockers**; warnings
+> incorporados abaixo.
+
+## O que cria
+
+| Nova (EN) | Fonte (rb7, PT) | Notas |
+|---|---|---|
+| `companies` | empresas | seed: só **RB7 Digital** (a "Berta" do rb7 era fictícia — Luiz, 2026-06-10) |
+| `accounts` | contas | enum EN (checking/credit_card/inter_company); seed: só **Cartão Sicoob RB7** (contas Sicredi/C6 do rb7 eram fictícias) |
+| `entries` | lancamentos | enums payable/receivable + pending/paid/overdue/cancelled; trigger `set_updated_at` hardened |
+| `bank_transactions` | transacoes_ofx | + `invoice_id` e `auto_categorized` (herança do categorizador p/ merge Fase 4); UNIQUE(account_id, fit_id) |
+| `hotmart_sales` | vendas_hotmart | status mantém valores PT dos relatórios |
+
+Mais: `invoices.account_id` (nullable, FK accounts RESTRICT) com backfill das 3
+faturas → Cartão Sicoob RB7 (guarda row_count=3).
+
+## Decisões de desenho (desvios conscientes do rb7 — detalhadas no header do SQL)
+
+1. **RESTRICT no lugar de CASCADE** (filosofia 1b); vínculos fracos = SET NULL.
+2. **category_id → tabela viva `categories`** (um sistema só na transição; tipo
+   pagar/receber e modelo unificado = Fase 3).
+3. **Team RLS desde o dia 1** → +5 WARNs lint 0024 esperados nos advisors (aceitos).
+4. **Sem user_id** nas tabelas novas; autoria informativa via `entries.created_by`.
+5. ⚠️ **Cartão Sicoob NÃO usa o dedupe de bank_transactions** (FITID repete entre
+   parcelas) — fluxo de cartão segue em invoices/transactions até a Fase 4.
+6. `invoices.account_id` nullable até o app TS (Fase 2) preenchê-la — faturas
+   importadas entre a 1c e a Fase 2 nascem com NULL (re-backfill na Fase 2).
+7. **Consequência futura do SET NULL** (decidida agora, vale na Fase 4): excluir
+   uma fatura passa a ÓRFANAR os `bank_transactions.invoice_id` em vez de
+   deletá-los — extrato bancário é fato independente do agrupamento. A UX de
+   exclusão de fatura do app TS deve comunicar isso.
+8. **Empresa dona do "Cartão Sicoob RB7" = RB7 Digital** — ✅ ratificado pelo
+   Luiz em 2026-06-10 (junto com o descarte dos seeds fictícios do rb7).
+
+## Impacto no app atual: ZERO
+
+Tabelas novas não são lidas pelo App.jsx; a coluna nova em invoices é ignorada
+pelo `select *` e os inserts continuam válidos (nullable).
+
+## Ordem de aplicação
+
+1. Verificação adversarial (workflow) ✅ → aprovação do Luiz.
+2. Conferir backup diário recente (a 1c muta dados vivos no backfill) e
+   **commit local nomeando os arquivos** (a migration + MIGRATIONS.md +
+   `supabase/audit/rb7-recovery/`; `.mcp.json`/CLAUDE.md só por decisão
+   explícita).
+3. **Janela quieta** (ninguém importando OFX — a guarda do backfill pina n=3 e
+   abortaria com fatura nova concorrente; abort é seguro, só reavalia e repete)
+   → `apply_migration` com name `phase1c_new_tables`, conteúdo lido via
+   Read/MCP — **nunca via `Get-Content` sem `-Encoding utf8`** (arquivo UTF-8
+   sem BOM com seeds multibyte; mojibake passaria pelas guardas de contagem).
+4. `list_migrations` → rename + referências cruzadas + status deste runbook.
+5. Advisors (security: 6 WARNs 0024 da 1b + 5 novos = 11, todos aceitos;
+   performance: INFOs `unused_index` nos 16 índices recém-criados — esperado).
+6. Smoke: SQL de verificação (tabelas/policies/grants/seeds/backfill + check
+   byte-exato `select count(*) from public.accounts where name = 'Cartão
+   Sicoob RB7'` = 1); probe REST (anon barrado nas tabelas novas; authenticated
+   lê accounts — se vier `PGRST205`, é o schema cache do PostgREST recarregando:
+   aguardar segundos e re-tentar antes de suspeitar de grant); **import de OFX
+   descartável + delete da fatura** (INSERT de invoices pós-ALTER, account_id
+   nasce NULL); round-trip em `entries` como authenticated (INSERT/UPDATE/DELETE
+   descartável conferindo que `updated_at` avança — valida trigger + policy).
+7. Commit final + push.
+
+## Rollback
+
+Tabelas novas sem dados de produção até a Fase 2 ⇒ rollback = drop limpo, NESTA
+ordem (FKs mandam): 1) `alter table public.invoices drop column account_id`
+(libera accounts), 2) `drop table` em bank_transactions → hotmart_sales →
+entries → accounts → companies, 3) `drop function public.set_updated_at()` e
+`drop type` nos 3 enums. Sem perda possível além dos próprios seeds.
+4) **Corrigir o histórico**: `delete from supabase_migrations.schema_migrations
+where version = '<version real do apply>'` (ou `supabase migration repair
+--status reverted <version>`) + remover o arquivo local renomeado — o histórico
+é fonte de fatos do projeto e não pode listar migration cujos objetos não
+existem.
+
+## Follow-ups pra Fase 2/4 (registrados pela verificação)
+
+- **Import deve REPORTAR duplicatas puladas** (não `ignoreDuplicates` silencioso
+  como no rb7): as chaves únicas de import (`bank_transactions(account_id,
+  fit_id)`, `hotmart_sales.transaction_code`) são "envenenáveis" por qualquer
+  authenticated — colisão precisa ficar visível.
+- **FITID vazio**: `bank_transactions.fit_id` é NOT NULL — o import OFX da Fase
+  2 e a carga da Fase 4 precisam de fitid sintético pra transações sem FITID.
+- **Upsert Hotmart em reimport** pode trocar `company_id` de venda existente —
+  decidir semântica na Fase 2.
