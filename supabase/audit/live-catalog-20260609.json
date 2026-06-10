@@ -1,0 +1,192 @@
+{
+  "_meta": {
+    "project_ref": "qdnqghefwjpeiidjlzjy",
+    "extracted_at": "2026-06-09",
+    "extracted_via": "MCP supabase (execute_sql sobre pg_catalog/information_schema) + get_advisors",
+    "postgres_version": "PostgreSQL 17.6 on aarch64-unknown-linux-gnu",
+    "migration_history": "VAZIO — todo o schema foi aplicado via SQL Editor, sem registro em supabase_migrations",
+    "purpose": "Fonte da verdade para o baseline da Fase 1a. O schema do repo (supabase/legacy/*.sql) estava desatualizado."
+  },
+  "row_counts": {
+    "auth.users": 2,
+    "profiles": 2,
+    "categories": 21,
+    "auto_rules": 124,
+    "invoices": 3,
+    "transactions": 519,
+    "purchase_items": 9,
+    "purchase_item_categories": 8
+  },
+  "tables": {
+    "profiles": {
+      "rls_enabled": true,
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "email", "type": "text", "nullable": true, "default": null},
+        {"name": "created_at", "type": "timestamptz", "nullable": true, "default": "now()"}
+      ],
+      "constraints": [
+        {"name": "profiles_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "profiles_id_fkey", "def": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE"}
+      ]
+    },
+    "categories": {
+      "rls_enabled": true,
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+        {"name": "user_id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "name", "type": "text", "nullable": false, "default": null},
+        {"name": "color_index", "type": "integer", "nullable": false, "default": "0"},
+        {"name": "created_at", "type": "timestamptz", "nullable": true, "default": "now()"}
+      ],
+      "constraints": [
+        {"name": "categories_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "categories_user_id_fkey", "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"},
+        {"name": "categories_user_id_name_key", "def": "UNIQUE (user_id, name)"}
+      ]
+    },
+    "auto_rules": {
+      "rls_enabled": true,
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+        {"name": "user_id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "keywords", "type": "text[]", "nullable": false, "default": null},
+        {"name": "category", "type": "text", "nullable": false, "default": null},
+        {"name": "created_at", "type": "timestamptz", "nullable": true, "default": "now()"}
+      ],
+      "constraints": [
+        {"name": "auto_rules_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "auto_rules_user_id_fkey", "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"}
+      ]
+    },
+    "invoices": {
+      "rls_enabled": true,
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+        {"name": "user_id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "name", "type": "text", "nullable": true, "default": null},
+        {"name": "total", "type": "numeric", "nullable": true, "default": "0"},
+        {"name": "transaction_count", "type": "integer", "nullable": true, "default": "0"},
+        {"name": "imported_at", "type": "timestamptz", "nullable": true, "default": "now()"}
+      ],
+      "constraints": [
+        {"name": "invoices_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "invoices_user_id_fkey", "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"}
+      ]
+    },
+    "transactions": {
+      "rls_enabled": true,
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+        {"name": "user_id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "invoice_id", "type": "uuid", "nullable": true, "default": null},
+        {"name": "fit_id", "type": "text", "nullable": true, "default": null},
+        {"name": "memo", "type": "text", "nullable": false, "default": null},
+        {"name": "amount", "type": "numeric", "nullable": false, "default": null},
+        {"name": "date", "type": "text", "nullable": false, "default": null},
+        {"name": "category", "type": "text", "nullable": true, "default": null},
+        {"name": "auto_categorized", "type": "boolean", "nullable": true, "default": "false"},
+        {"name": "created_at", "type": "timestamptz", "nullable": true, "default": "now()"}
+      ],
+      "constraints": [
+        {"name": "transactions_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "transactions_user_id_fkey", "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"},
+        {"name": "transactions_invoice_id_fkey", "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"}
+      ]
+    },
+    "purchase_item_categories": {
+      "rls_enabled": true,
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+        {"name": "user_id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "name", "type": "text", "nullable": false, "default": null},
+        {"name": "color_index", "type": "integer", "nullable": false, "default": "0"},
+        {"name": "created_at", "type": "timestamptz", "nullable": true, "default": "now()"}
+      ],
+      "constraints": [
+        {"name": "purchase_item_categories_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "purchase_item_categories_user_id_fkey", "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"},
+        {"name": "purchase_item_categories_user_id_name_key", "def": "UNIQUE (user_id, name)"}
+      ]
+    },
+    "purchase_items": {
+      "rls_enabled": true,
+      "drift_vs_repo": "month, purchase_date, payment_method só existem em produção; invoice_id é NULLABLE em produção (repo dizia NOT NULL)",
+      "columns": [
+        {"name": "id", "type": "uuid", "nullable": false, "default": "gen_random_uuid()"},
+        {"name": "user_id", "type": "uuid", "nullable": false, "default": null},
+        {"name": "invoice_id", "type": "uuid", "nullable": true, "default": null},
+        {"name": "description", "type": "text", "nullable": false, "default": null},
+        {"name": "amount", "type": "numeric", "nullable": true, "default": null},
+        {"name": "category", "type": "text", "nullable": true, "default": null},
+        {"name": "created_at", "type": "timestamptz", "nullable": true, "default": "now()"},
+        {"name": "month", "type": "text", "nullable": true, "default": null},
+        {"name": "purchase_date", "type": "text", "nullable": true, "default": null},
+        {"name": "payment_method", "type": "text", "nullable": true, "default": null}
+      ],
+      "constraints": [
+        {"name": "purchase_items_pkey", "def": "PRIMARY KEY (id)"},
+        {"name": "purchase_items_user_id_fkey", "def": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"},
+        {"name": "purchase_items_invoice_id_fkey", "def": "FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE"}
+      ]
+    }
+  },
+  "indexes_non_constraint": [
+    "CREATE INDEX idx_auto_rules_user ON public.auto_rules USING btree (user_id)",
+    "CREATE INDEX idx_categories_user ON public.categories USING btree (user_id)",
+    "CREATE INDEX idx_invoices_user ON public.invoices USING btree (user_id)",
+    "CREATE INDEX idx_purchase_item_categories_user ON public.purchase_item_categories USING btree (user_id)",
+    "CREATE INDEX idx_purchase_items_invoice ON public.purchase_items USING btree (invoice_id)",
+    "CREATE INDEX idx_transactions_invoice ON public.transactions USING btree (invoice_id)",
+    "CREATE INDEX idx_transactions_user ON public.transactions USING btree (user_id)"
+  ],
+  "policies": [
+    {"table": "auto_rules", "name": "Users manage own rules", "cmd": "ALL", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = user_id)", "with_check": null},
+    {"table": "categories", "name": "Users manage own categories", "cmd": "ALL", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = user_id)", "with_check": null},
+    {"table": "invoices", "name": "Users manage own invoices", "cmd": "ALL", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = user_id)", "with_check": null},
+    {"table": "profiles", "name": "Users can insert own profile", "cmd": "INSERT", "permissive": "PERMISSIVE", "roles": "{public}", "using": null, "with_check": "(auth.uid() = id)"},
+    {"table": "profiles", "name": "Users can update own profile", "cmd": "UPDATE", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = id)", "with_check": null},
+    {"table": "profiles", "name": "Users can view own profile", "cmd": "SELECT", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = id)", "with_check": null},
+    {"table": "purchase_item_categories", "name": "Users manage own purchase categories", "cmd": "ALL", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = user_id)", "with_check": null},
+    {"table": "purchase_items", "name": "Users manage own purchase items", "cmd": "ALL", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = user_id)", "with_check": null},
+    {"table": "transactions", "name": "Users manage own transactions", "cmd": "ALL", "permissive": "PERMISSIVE", "roles": "{public}", "using": "(auth.uid() = user_id)", "with_check": null}
+  ],
+  "functions": [
+    {
+      "name": "handle_new_user",
+      "language": "plpgsql",
+      "security_definer": true,
+      "proconfig": null,
+      "note": "SEM set search_path — bug confirmado vivo. proacl com grants EXPLÍCITOS: {=X/postgres, postgres=X, anon=X, authenticated=X, service_role=X} — o revoke precisa cobrir public+anon+authenticated (só PUBLIC não bastaria). Obs.: função 'returns trigger' não é invocável via /rest/v1/rpc na prática; os lints 0028/0029 flagram pelo privilégio EXECUTE.",
+      "definition": "CREATE OR REPLACE FUNCTION public.handle_new_user()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nbegin\n  insert into public.profiles (id, email)\n  values (new.id, new.email);\n  return new;\nend;\n$function$"
+    }
+  ],
+  "triggers": [
+    {"table": "auth.users", "name": "on_auth_user_created", "enabled": "O", "definition": "CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION handle_new_user()"}
+  ],
+  "grants_public_schema": {
+    "note": "anon, authenticated e service_role têm TODOS os privilégios (DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE) em todas as 7 tabelas — grants default do Supabase",
+    "tables_affected": ["profiles", "categories", "auto_rules", "invoices", "transactions", "purchase_item_categories", "purchase_items"]
+  },
+  "extensions_installed": [
+    {"name": "plpgsql", "schema": "pg_catalog", "version": "1.0"},
+    {"name": "pgcrypto", "schema": "extensions", "version": "1.3"},
+    {"name": "uuid-ossp", "schema": "extensions", "version": "1.1"},
+    {"name": "pg_stat_statements", "schema": "extensions", "version": "1.11"},
+    {"name": "supabase_vault", "schema": "vault", "version": "0.3.1"}
+  ],
+  "absent": {
+    "views": [], "materialized_views": [], "enums": [], "domains": [],
+    "realtime_publication_tables": [], "storage_buckets": [], "migration_history": []
+  },
+  "advisors_security": [
+    {"lint": "function_search_path_mutable", "level": "WARN", "object": "public.handle_new_user", "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable"},
+    {"lint": "anon_security_definer_function_executable", "level": "WARN", "object": "public.handle_new_user", "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable"},
+    {"lint": "authenticated_security_definer_function_executable", "level": "WARN", "object": "public.handle_new_user", "remediation": "https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable"},
+    {"lint": "auth_leaked_password_protection", "level": "WARN", "object": "Auth (HIBP desabilitado)", "remediation": "https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection"}
+  ],
+  "advisors_performance": [
+    {"lint": "unindexed_foreign_keys", "level": "INFO", "object": "purchase_items.user_id (purchase_items_user_id_fkey)"},
+    {"lint": "auth_rls_initplan", "level": "WARN", "object": "9 policies (todas) re-avaliam auth.uid() por linha — corrigir com (select auth.uid())"}
+  ]
+}
