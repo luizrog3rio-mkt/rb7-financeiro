@@ -9,6 +9,7 @@ import Compras from './pages/Compras'
 import Lancamentos from './pages/Lancamentos'
 import Extrato from './pages/Extrato'
 import Hotmart from './pages/Hotmart'
+import Dashboard from './pages/Dashboard'
 import EmConstrucao from './pages/EmConstrucao'
 
 function Rotas() {
@@ -27,7 +28,7 @@ function Rotas() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<EmConstrucao titulo="Dashboard" etapa="etapa 7" />} />
+        <Route path="/" element={<Dashboard />} />
         <Route path="/faturas" element={<Faturas />} />
         <Route path="/faturas/:id" element={<Fatura />} />
         <Route path="/compras" element={<Compras />} />
