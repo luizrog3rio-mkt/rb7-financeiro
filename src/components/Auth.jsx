@@ -23,7 +23,7 @@ export default function Auth() {
       if (error) {
         setError(error.message);
       } else {
-        setMessage("Conta criada! Verifique seu e-mail para confirmar o cadastro.");
+        setMessage("Conta criada! Entrando...");
       }
     }
     setLoading(false);
