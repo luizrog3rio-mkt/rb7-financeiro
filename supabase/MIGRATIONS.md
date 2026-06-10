@@ -129,6 +129,17 @@ compatibilidade com o App.jsx, e este runbook) — 0 blockers em 2026-06-09.
 > em ALL). Pré-requisitos confirmados por probe na janela do apply: `signup_disabled`,
 > `anonymous_provider_disabled`, auth.users = só as 2 contas, backup diário de
 > 2026-06-10 07:58 UTC presente.
+>
+> **Smoke test ✅ PASSOU em 2026-06-10** (Playwright/Edge contra prod, usuário
+> descartável criado pelo admin no dashboard e deletado via SQL no fim; banco voltou
+> byte-a-byte ao baseline): membro novo vê as 3 faturas + modal de pendentes lista os
+> 9 itens da Lívia em 2 grupos de mês (fix do `.eq` exercitado; "Pular" preservou
+> tudo), import de OFX descartável, edição de categoria persistiu entre sessões,
+> CRUD de purchase_item, `window.confirm` novo disparou no delete da fatura, logout —
+> zero erros de console/HTTP. RESTRICT validado nos DOIS sentidos: delete do usuário
+> COM dados → `23503 invoices_user_id_fkey` (bloqueado); depois da limpeza → passou.
+> Probes REST: team READ (200 + linhas da Lívia) e team UPDATE no-op em transação
+> dela (200, `with check (true)` ok); anon segue 401/42501.
 
 ## O que muda
 
