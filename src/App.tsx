@@ -3,6 +3,8 @@ import { AppProvider, useApp } from './contexts/AppContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Contas from './pages/Contas'
+import Faturas from './pages/Faturas'
+import Fatura from './pages/Fatura'
 import EmConstrucao from './pages/EmConstrucao'
 
 function Rotas() {
@@ -22,7 +24,8 @@ function Rotas() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<EmConstrucao titulo="Dashboard" etapa="etapa 7" />} />
-        <Route path="/faturas" element={<EmConstrucao titulo="Faturas de Cartão" etapa="etapa 2" />} />
+        <Route path="/faturas" element={<Faturas />} />
+        <Route path="/faturas/:id" element={<Fatura />} />
         <Route path="/compras" element={<EmConstrucao titulo="Compras" etapa="etapa 3" />} />
         <Route path="/pagar" element={<EmConstrucao titulo="Contas a Pagar" etapa="etapa 4" />} />
         <Route path="/receber" element={<EmConstrucao titulo="Contas a Receber" etapa="etapa 4" />} />

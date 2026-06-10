@@ -81,7 +81,7 @@ export default function Layout() {
           <LogOut size={16} /> Sair
         </button>
       </aside>
-      <main className="flex-1 ml-60 p-6 lg:p-8">
+      <main className="flex-1 ml-60 p-6">
         <Outlet />
       </main>
     </div>
