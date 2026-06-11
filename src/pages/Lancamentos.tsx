@@ -6,6 +6,7 @@ import { fmtBRL, fmtData, hoje } from '../lib/format'
 import { corDaCategoria } from '../lib/fatura'
 import type { Account, Category, Entry, EntryType } from '../lib/types'
 import { Card, PageHeader, StatusBadge, Badge, Vazio, Modal, ErroBanner, inputCls, btnPrimario } from '../components/ui'
+import DataTable, { type DataColumn } from '../components/DataTable'
 
 // Etapa 4 — Contas a Pagar/Receber. Port do Lancamentos.tsx do rb7 adaptado
 // pro schema EN (tabela `entries`). Adaptações vs a fonte:
@@ -82,7 +83,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     setModalAberto(true)
   }
 
-  const abrirEdicao = (l: Entry) => {
+  const abrirEdicao = useCallback((l: Entry) => {
     setForm({
       id: l.id,
       company_id: l.company_id,
@@ -97,7 +98,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       notes: l.notes ?? '',
     })
     setModalAberto(true)
-  }
+  }, [])
 
   const salvar = async (e: FormEvent) => {
     e.preventDefault()
@@ -127,18 +128,18 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     carregar()
   }
 
-  const marcarPago = async (l: Entry) => {
+  const marcarPago = useCallback(async (l: Entry) => {
     const { error } = await supabase.from('entries').update({ payment_date: hoje(), status: 'paid' }).eq('id', l.id)
     if (error) { setErro('Erro ao marcar como pago: ' + error.message); return }
     carregar()
-  }
+  }, [carregar])
 
-  const excluir = async (l: Entry) => {
+  const excluir = useCallback(async (l: Entry) => {
     if (!window.confirm(`Excluir "${l.description}"?`)) return
     const { error } = await supabase.from('entries').delete().eq('id', l.id)
     if (error) { setErro('Erro ao excluir lançamento: ' + error.message); return }
     carregar()
-  }
+  }, [carregar])
 
   const totais = useMemo(() => {
     const aberto = lancamentos.filter((l) => l.status === 'pending' || l.status === 'overdue')
@@ -150,6 +151,40 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   }, [lancamentos])
 
   const ehPagar = tipo === 'payable'
+
+  const colunas = useMemo<DataColumn<Entry>[]>(() => [
+    { id: 'description', header: 'Descrição', size: 240, cell: (l) => (
+      <div>
+        <p className="font-medium text-slate-800">{l.description}</p>
+        {l.counterparty && <p className="text-xs text-slate-400">{l.counterparty}</p>}
+      </div>
+    ) },
+    { id: 'category', header: 'Categoria', size: 150, cell: (l) => (l.category ? <Badge cor={corDaCategoria(l.category.color_index).text}>{l.category.name}</Badge> : '—') },
+    { id: 'issue_date', header: 'Emissão', size: 110, cell: (l) => <span className="text-slate-600">{fmtData(l.issue_date)}</span> },
+    { id: 'due_date', header: 'Vencimento', size: 110, cell: (l) => <span className="text-slate-600">{fmtData(l.due_date)}</span> },
+    { id: 'payment_date', header: 'Pagamento', size: 110, cell: (l) => <span className="text-slate-600">{fmtData(l.payment_date)}</span> },
+    { id: 'amount', header: 'Valor', size: 120, align: 'right', cell: (l) => <span className="font-semibold">{fmtBRL(Number(l.amount))}</span> },
+    { id: 'status', header: 'Status', size: 120, cell: (l) => <StatusBadge status={l.status} /> },
+    { id: 'acoes', header: '', label: 'Ações', size: 110, align: 'right', enableHiding: false, cell: (l) => (
+      <div className="flex gap-2 justify-end">
+        {isAdmin && l.status !== 'paid' && l.status !== 'cancelled' && (
+          <button title={ehPagar ? 'Marcar como pago' : 'Marcar como recebido'} onClick={() => marcarPago(l)} className="text-green-600 hover:text-green-800">
+            <CheckCircle2 size={17} />
+          </button>
+        )}
+        {isAdmin && (
+          <button title="Editar" onClick={() => abrirEdicao(l)} className="text-slate-400 hover:text-indigo-600">
+            <Pencil size={16} />
+          </button>
+        )}
+        {isAdmin && (
+          <button title="Excluir" onClick={() => excluir(l)} className="text-slate-400 hover:text-red-600">
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+    ) },
+  ], [isAdmin, ehPagar, marcarPago, abrirEdicao, excluir])
 
   return (
     <div>
@@ -194,59 +229,12 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         {lancamentos.length === 0 ? (
           <Vazio mensagem="Nenhum lançamento encontrado." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 uppercase border-b border-slate-200">
-                  <th className="px-4 py-3">Descrição</th>
-                  <th className="px-4 py-3">Categoria</th>
-                  <th className="px-4 py-3">Emissão</th>
-                  <th className="px-4 py-3">Vencimento</th>
-                  <th className="px-4 py-3">Pagamento</th>
-                  <th className="px-4 py-3 text-right">Valor</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lancamentos.map((l) => (
-                  <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-slate-800">{l.description}</p>
-                      {l.counterparty && <p className="text-xs text-slate-400">{l.counterparty}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {l.category ? <Badge cor={corDaCategoria(l.category.color_index).text}>{l.category.name}</Badge> : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{fmtData(l.issue_date)}</td>
-                    <td className="px-4 py-3 text-slate-600">{fmtData(l.due_date)}</td>
-                    <td className="px-4 py-3 text-slate-600">{fmtData(l.payment_date)}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{fmtBRL(Number(l.amount))}</td>
-                    <td className="px-4 py-3"><StatusBadge status={l.status} /></td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 justify-end">
-                        {isAdmin && l.status !== 'paid' && l.status !== 'cancelled' && (
-                          <button title={ehPagar ? 'Marcar como pago' : 'Marcar como recebido'} onClick={() => marcarPago(l)} className="text-green-600 hover:text-green-800">
-                            <CheckCircle2 size={17} />
-                          </button>
-                        )}
-                        {isAdmin && (
-                        <button title="Editar" onClick={() => abrirEdicao(l)} className="text-slate-400 hover:text-indigo-600">
-                          <Pencil size={16} />
-                        </button>
-                        )}
-                        {isAdmin && (
-                        <button title="Excluir" onClick={() => excluir(l)} className="text-slate-400 hover:text-red-600">
-                          <Trash2 size={16} />
-                        </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey={`lancamentos:${tipo}`}
+            columns={colunas}
+            data={lancamentos}
+            getRowId={(l) => l.id}
+          />
         )}
       </Card>
 

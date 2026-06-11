@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Upload } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
@@ -7,6 +7,7 @@ import { fmtBRL, fmtData } from '../lib/format'
 import { corDaCategoria } from '../lib/fatura'
 import type { Account, Category, BankTransaction } from '../lib/types'
 import { Card, PageHeader, Badge, Vazio, ErroBanner, inputCls, btnPrimario } from '../components/ui'
+import DataTable, { type DataColumn } from '../components/DataTable'
 
 // Etapa 5 — Extratos (OFX). Port do ImportarOfx.tsx do rb7 pra bank_transactions.
 // Conta corrente (cartão vai pelo fluxo de Faturas). Categoria viva (sem tipo,
@@ -58,11 +59,36 @@ export default function Extrato() {
     carregarTransacoes()
   }
 
-  const categorizar = async (t: BankTransaction, categoryId: string) => {
+  const categorizar = useCallback(async (t: BankTransaction, categoryId: string) => {
     const { error } = await supabase.from('bank_transactions').update({ category_id: categoryId || null }).eq('id', t.id)
     if (error) { setErro('Erro ao categorizar: ' + error.message); return }
     carregarTransacoes()
-  }
+  }, [carregarTransacoes])
+
+  const colunas = useMemo<DataColumn<BankTransaction>[]>(() => [
+    { id: 'date', header: 'Data', size: 110, cell: (t) => <span className="text-slate-600 whitespace-nowrap">{fmtData(t.date)}</span> },
+    { id: 'memo', header: 'Descrição', size: 360, cell: (t) => <span className="text-slate-700">{t.memo ?? '—'}</span> },
+    { id: 'amount', header: 'Valor', size: 130, align: 'right', cell: (t) => (
+      <span className={`font-semibold whitespace-nowrap ${Number(t.amount) < 0 ? 'text-red-600' : 'text-green-600'}`}>{fmtBRL(Number(t.amount))}</span>
+    ) },
+    { id: 'category', header: 'Categoria', size: 220, cell: (t) => (
+      t.category ? (
+        <div className="flex items-center gap-2">
+          <Badge cor={corDaCategoria(t.category.color_index).text}>{t.category.name}</Badge>
+          {isAdmin && <button onClick={() => categorizar(t, '')} className="text-xs text-slate-400 hover:text-red-500">×</button>}
+        </div>
+      ) : isAdmin ? (
+        <select
+          className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-500"
+          value=""
+          onChange={(e) => { if (e.target.value) categorizar(t, e.target.value) }}
+        >
+          <option value="">Categorizar…</option>
+          {categorias.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      ) : null
+    ) },
+  ], [isAdmin, categorias, categorizar])
 
   return (
     <div>
@@ -107,46 +133,12 @@ export default function Extrato() {
         {transacoes.length === 0 ? (
           <Vazio mensagem="Nenhuma transação importada para esta conta." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 uppercase border-b border-slate-200">
-                  <th className="px-4 py-3">Data</th>
-                  <th className="px-4 py-3">Descrição</th>
-                  <th className="px-4 py-3 text-right">Valor</th>
-                  <th className="px-4 py-3 w-56">Categoria</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transacoes.map((t) => (
-                  <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{fmtData(t.date)}</td>
-                    <td className="px-4 py-2.5 text-slate-700">{t.memo ?? '—'}</td>
-                    <td className={`px-4 py-2.5 text-right font-semibold whitespace-nowrap ${Number(t.amount) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {fmtBRL(Number(t.amount))}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {t.category ? (
-                        <div className="flex items-center gap-2">
-                          <Badge cor={corDaCategoria(t.category.color_index).text}>{t.category.name}</Badge>
-                          {isAdmin && <button onClick={() => categorizar(t, '')} className="text-xs text-slate-400 hover:text-red-500">×</button>}
-                        </div>
-                      ) : isAdmin ? (
-                        <select
-                          className="w-full rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-500"
-                          value=""
-                          onChange={(e) => { if (e.target.value) categorizar(t, e.target.value) }}
-                        >
-                          <option value="">Categorizar…</option>
-                          {categorias.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="extrato-ofx"
+            columns={colunas}
+            data={transacoes}
+            getRowId={(t) => t.id}
+          />
         )}
       </Card>
     </div>

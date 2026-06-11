@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Upload, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
@@ -6,6 +6,7 @@ import { parseHotmartCSV } from '../lib/hotmart'
 import { fmtBRL, fmtData, primeiroDiaMes, ultimoDiaMes } from '../lib/format'
 import type { HotmartSale } from '../lib/types'
 import { Card, PageHeader, Vazio, ErroBanner, inputCls, btnPrimario, btnSecundario } from '../components/ui'
+import DataTable, { type DataColumn } from '../components/DataTable'
 
 // Etapa 6 — Conciliação Hotmart. Port do Hotmart.tsx do rb7 pra hotmart_sales.
 // Feature 100% exclusiva do rb7 (não existia no app antigo). Upsert por
@@ -135,6 +136,30 @@ export default function Hotmart() {
     carregar()
   }
 
+  // colunas da tabela (reordenáveis/redimensionáveis/ocultáveis via DataTable)
+  const colunas = useMemo<DataColumn<HotmartSale>[]>(() => [
+    { id: 'sale_date', header: 'Data', size: 100, cell: (v) => <span className="whitespace-nowrap text-slate-600">{fmtData(v.sale_date)}</span> },
+    { id: 'product', header: 'Produto', size: 220, cell: (v) => (
+      <span className="text-slate-800">
+        {v.product}
+        {v.currency && v.currency !== 'BRL' && (
+          <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 align-middle">{v.currency}</span>
+        )}
+      </span>
+    ) },
+    { id: 'transaction_code', header: 'Transação', size: 130, cell: (v) => <span className="text-xs text-slate-400">{v.transaction_code}</span> },
+    { id: 'total_amount', header: 'Valor Total', size: 120, align: 'right', cell: (v) => fmtBRL(Number(v.total_amount)) },
+    { id: 'gross_amount', header: 'Bruto', size: 110, align: 'right', cell: (v) => fmtBRL(Number(v.gross_amount)) },
+    { id: 'hotmart_fee', header: 'Taxa', size: 100, align: 'right', cell: (v) => <span className="text-red-600">{fmtBRL(Number(v.hotmart_fee))}</span> },
+    { id: 'fee_percentage', header: '% Hotmart', size: 100, align: 'right', cell: (v) => <span className="text-slate-500 whitespace-nowrap">{v.fee_percentage != null ? `${Number(v.fee_percentage)}%` : '—'}</span> },
+    { id: 'afiliados', header: 'Afil./Coprod.', size: 120, align: 'right', cell: (v) => <span className="text-orange-600">{fmtBRL(Number(v.affiliate_commission) + Number(v.coproduction_commission))}</span> },
+    { id: 'net_amount', header: 'Líquido', size: 120, align: 'right', cell: (v) => <span className="font-semibold text-green-700">{fmtBRL(Number(v.net_amount))}</span> },
+    { id: 'release_date', header: 'Liberação', size: 110, cell: (v) => <span className="whitespace-nowrap text-slate-600">{fmtData(v.release_date)}</span> },
+    { id: 'payment_method', header: 'Pagamento', size: 130, cell: (v) => <span className="text-xs text-slate-600 whitespace-nowrap">{v.payment_method ?? '—'}</span> },
+    { id: 'installments', header: 'Parcelas', size: 90, align: 'center', cell: (v) => <span className="text-slate-600 whitespace-nowrap">{v.installments == null ? '—' : v.installments <= 1 ? 'À vista' : `${v.installments}x`}</span> },
+    { id: 'status', header: 'Status', size: 120, cell: (v) => <StatusHotmart status={v.status} /> },
+  ], [])
+
   return (
     <div>
       <PageHeader
@@ -214,62 +239,19 @@ export default function Hotmart() {
         {vendas.length === 0 ? (
           <Vazio mensagem="Nenhuma venda ainda. Clique em Sincronizar com a Hotmart acima — ou importe um CSV exportado de lá." />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 uppercase border-b border-slate-200">
-                  <th className="px-4 py-3">Data</th>
-                  <th className="px-4 py-3">Produto</th>
-                  <th className="px-4 py-3">Transação</th>
-                  <th className="px-4 py-3 text-right">Valor Total</th>
-                  <th className="px-4 py-3 text-right">Bruto</th>
-                  <th className="px-4 py-3 text-right">Taxa</th>
-                  <th className="px-4 py-3 text-right">% Hotmart</th>
-                  <th className="px-4 py-3 text-right">Afil./Coprod.</th>
-                  <th className="px-4 py-3 text-right">Líquido</th>
-                  <th className="px-4 py-3">Liberação</th>
-                  <th className="px-4 py-3">Pagamento</th>
-                  <th className="px-4 py-3 text-center">Parcelas</th>
-                  <th className="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendas.slice(0, 300).map((v) => (
-                  <tr key={v.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-2.5 whitespace-nowrap text-slate-600">{fmtData(v.sale_date)}</td>
-                    <td className="px-4 py-2.5 text-slate-800">
-                      {v.product}
-                      {v.currency && v.currency !== 'BRL' && (
-                        <span className="ml-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1 py-0.5 align-middle">{v.currency}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-slate-400">{v.transaction_code}</td>
-                    <td className="px-4 py-2.5 text-right">{fmtBRL(Number(v.total_amount))}</td>
-                    <td className="px-4 py-2.5 text-right">{fmtBRL(Number(v.gross_amount))}</td>
-                    <td className="px-4 py-2.5 text-right text-red-600">{fmtBRL(Number(v.hotmart_fee))}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-500 whitespace-nowrap">{v.fee_percentage != null ? `${Number(v.fee_percentage)}%` : '—'}</td>
-                    <td className="px-4 py-2.5 text-right text-orange-600">
-                      {fmtBRL(Number(v.affiliate_commission) + Number(v.coproduction_commission))}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-green-700">{fmtBRL(Number(v.net_amount))}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-slate-600">{fmtData(v.release_date)}</td>
-                    <td className="px-4 py-2.5 text-xs text-slate-600 whitespace-nowrap">{v.payment_method ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-center text-slate-600 whitespace-nowrap">
-                      {v.installments == null ? '—' : v.installments <= 1 ? 'À vista' : `${v.installments}x`}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StatusHotmart status={v.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+            <DataTable
+              tableKey="hotmart-sales"
+              columns={colunas}
+              data={vendas.slice(0, 300)}
+              getRowId={(v) => v.id}
+            />
             {totais.qtd > vendas.length && (
               <p className="text-xs text-slate-400 text-center py-3 border-t border-slate-100">
                 Mostrando as {vendas.length} vendas mais recentes. Os totais acima consideram todas as {totais.qtd} aprovadas do período. Use o filtro de mês para ver outros períodos.
               </p>
             )}
-          </div>
+          </>
         )}
       </Card>
     </div>

@@ -92,7 +92,9 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `sb_publishable_`/`sb_secret_`; as JWT legadas estão **desabilitadas** — não
   reativar). `.env.example` na raiz.
 - `npm run dev` → localhost:5173 · `npm run build` (tsc strict + vite) ·
-  `npm run lint` (0 errors; os 13 warnings de fetch-on-mount são conscientes,
+  `npm run lint` (0 errors; os 15 warnings conscientes = 13 fetch-on-mount + 2 da
+  DataTable: o load-on-mount do useColumnPrefs e o react-compiler "incompatible
+  library" das libs de tabela —
   ver eslint.config.js).
 - `xlsx` vem do tarball oficial do SheetJS (cdn.sheetjs.com) — o pacote do npm
   está abandonado com CVE; não trocar de volta.
@@ -101,3 +103,12 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
 - O "mundo fatura" (src/components/fatura/, Faturas, Fatura) usa estilos
   inline portados 1:1 do app antigo — fidelidade visual aos 15 contratos de
   `docs/fase2/contratos-app-antigo.md`. É intencional; o resto é Tailwind.
+- **Tabelas reordenáveis/redimensionáveis/ocultáveis**: `src/components/DataTable.tsx`
+  (TanStack Table v8 headless + @dnd-kit pro arrastar do header) + hook
+  `src/hooks/useColumnPrefs.ts` (cacheia em localStorage, persiste em
+  `user_table_prefs` por usuário, debounce 600ms). A página só descreve
+  `DataColumn<T>[]` (id/header/cell/size/align). Em uso: Hotmart, Contas a
+  Pagar/Receber (`lancamentos:${tipo}`), Extratos, Usuários. **Faturas (mundo
+  fatura) ficaram de fora do drag/resize** por causa dos contratos visuais —
+  Fase 2 dará só o "esconder coluna" lá. Handlers usados em `cell` precisam de
+  `useCallback` (senão a memo das colunas recria toda render → warn exhaustive-deps).

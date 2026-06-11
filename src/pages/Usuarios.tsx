@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Plus, Trash2, Ban, CheckCircle, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
 import { Card, PageHeader, Modal, ErroBanner, inputCls, btnPrimario } from '../components/ui'
+import DataTable, { type DataColumn } from '../components/DataTable'
 
 interface UsuarioAdmin {
   id: string
@@ -63,7 +64,7 @@ export default function Usuarios() {
     setSalvando(false)
   }
 
-  const mudarRole = async (userId: string, role: 'admin' | 'viewer') => {
+  const mudarRole = useCallback(async (userId: string, role: 'admin' | 'viewer') => {
     setErro(null)
     try {
       await chamar('update_role', { user_id: userId, role })
@@ -72,9 +73,9 @@ export default function Usuarios() {
       setErro(msgErro(e))
       carregar()
     }
-  }
+  }, [carregar])
 
-  const toggleBan = async (u: UsuarioAdmin) => {
+  const toggleBan = useCallback(async (u: UsuarioAdmin) => {
     const acao = u.banned ? 'reativar' : 'desativar'
     if (!window.confirm(`Quer ${acao} o acesso de ${u.email}?`)) return
     setErro(null)
@@ -84,9 +85,9 @@ export default function Usuarios() {
     } catch (e) {
       setErro(msgErro(e))
     }
-  }
+  }, [])
 
-  const excluir = async (u: UsuarioAdmin) => {
+  const excluir = useCallback(async (u: UsuarioAdmin) => {
     if (!window.confirm(`Excluir a conta de ${u.email}?\n\nEssa ação não tem desfazer — todos os dados criados por ela permanecem no sistema.`)) return
     setErro(null)
     try {
@@ -95,9 +96,56 @@ export default function Usuarios() {
     } catch (e) {
       setErro(msgErro(e))
     }
-  }
+  }, [])
 
-  const ehEu = (id: string) => id === session?.user.id
+  const ehEu = useCallback((id: string) => id === session?.user.id, [session])
+
+  const colunas = useMemo<DataColumn<UsuarioAdmin>[]>(() => [
+    { id: 'email', header: 'E-mail', size: 260, cell: (u) => (
+      <span className="font-medium text-slate-800">
+        {u.email}
+        {ehEu(u.id) && <span className="ml-2 text-xs text-slate-400">(você)</span>}
+      </span>
+    ) },
+    { id: 'role', header: 'Papel', size: 150, cell: (u) => (
+      ehEu(u.id) ? (
+        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">Admin</span>
+      ) : (
+        <select
+          value={u.role}
+          onChange={(e) => mudarRole(u.id, e.target.value as 'admin' | 'viewer')}
+          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium bg-white cursor-pointer"
+        >
+          <option value="admin">Admin</option>
+          <option value="viewer">Visualizador</option>
+        </select>
+      )
+    ) },
+    { id: 'status', header: 'Status', size: 120, cell: (u) => (
+      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${u.banned ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+        {u.banned ? 'Desativado' : 'Ativo'}
+      </span>
+    ) },
+    { id: 'last_sign_in_at', header: 'Último acesso', size: 140, cell: (u) => (
+      <span className="text-slate-500 text-xs">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('pt-BR') : '—'}</span>
+    ) },
+    { id: 'acoes', header: '', label: 'Ações', size: 100, align: 'right', enableHiding: false, cell: (u) => (
+      !ehEu(u.id) ? (
+        <div className="flex gap-2 justify-end">
+          <button
+            title={u.banned ? 'Reativar acesso' : 'Desativar acesso'}
+            onClick={() => toggleBan(u)}
+            className={u.banned ? 'text-green-500 hover:text-green-700' : 'text-slate-400 hover:text-amber-600'}
+          >
+            {u.banned ? <CheckCircle size={16} /> : <Ban size={16} />}
+          </button>
+          <button title="Excluir conta" onClick={() => excluir(u)} className="text-slate-400 hover:text-red-600">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ) : null
+    ) },
+  ], [ehEu, mudarRole, toggleBan, excluir])
 
   return (
     <div>
@@ -119,73 +167,12 @@ export default function Usuarios() {
         ) : usuarios.length === 0 ? (
           <p className="text-center text-slate-400 py-10 text-sm">Nenhum usuário encontrado.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 uppercase border-b border-slate-200">
-                  <th className="px-4 py-3">E-mail</th>
-                  <th className="px-4 py-3">Papel</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Último acesso</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuarios.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {u.email}
-                      {ehEu(u.id) && <span className="ml-2 text-xs text-slate-400">(você)</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {ehEu(u.id) ? (
-                        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700">
-                          Admin
-                        </span>
-                      ) : (
-                        <select
-                          value={u.role}
-                          onChange={(e) => mudarRole(u.id, e.target.value as 'admin' | 'viewer')}
-                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium bg-white cursor-pointer"
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="viewer">Visualizador</option>
-                        </select>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold ${u.banned ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                        {u.banned ? 'Desativado' : 'Ativo'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">
-                      {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('pt-BR') : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {!ehEu(u.id) && (
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            title={u.banned ? 'Reativar acesso' : 'Desativar acesso'}
-                            onClick={() => toggleBan(u)}
-                            className={u.banned ? 'text-green-500 hover:text-green-700' : 'text-slate-400 hover:text-amber-600'}
-                          >
-                            {u.banned ? <CheckCircle size={16} /> : <Ban size={16} />}
-                          </button>
-                          <button
-                            title="Excluir conta"
-                            onClick={() => excluir(u)}
-                            className="text-slate-400 hover:text-red-600"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            tableKey="usuarios"
+            columns={colunas}
+            data={usuarios}
+            getRowId={(u) => u.id}
+          />
         )}
       </Card>
 
