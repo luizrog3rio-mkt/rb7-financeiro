@@ -51,7 +51,7 @@ export default function ExportMenu({
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 230, zIndex: 9999, overflow: 'hidden' }}>
           <div style={{ padding: '10px 14px 6px', fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Exportar {label}</div>
           {[
-            { icon: '📊', label: 'Excel (.xlsx)', sub: 'Abre direto no Excel', action: () => { exportXLSX(exportTarget); setOpen(false) } },
+            { icon: '📊', label: 'Excel (.xlsx)', sub: 'Abre direto no Excel', action: () => { exportXLSX(exportTarget).catch(console.error); setOpen(false) } },
             { icon: '📄', label: 'CSV (.csv)', sub: 'Compatível com qualquer app', action: () => { exportCSV(exportTarget); setOpen(false) } },
           ].map(({ icon, label: l, sub, action }) => (
             <div
@@ -73,7 +73,7 @@ export default function ExportMenu({
               <div style={{ height: 1, background: '#f1f5f9', margin: '4px 0' }} />
               <div style={{ padding: '6px 14px 4px', fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Exportar todos ({transactions.length})</div>
               {[
-                { icon: '📊', label: 'Excel (.xlsx)', action: () => { exportXLSX(transactions); setOpen(false) } },
+                { icon: '📊', label: 'Excel (.xlsx)', action: () => { exportXLSX(transactions).catch(console.error); setOpen(false) } },
                 { icon: '📄', label: 'CSV (.csv)', action: () => { exportCSV(transactions); setOpen(false) } },
               ].map(({ icon, label: l, action }) => (
                 <div

@@ -1,6 +1,6 @@
 {
   "name": "categorizador-fatura",
-  "version": "2.0.0-fase2",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,7 +16,7 @@
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.1.0",
     "recharts": "^2.15.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -9,7 +9,7 @@ import { fmtBRL, fmtData, hoje } from '../lib/format'
 import { vendaAprovada } from '../lib/hotmart'
 import { CAT_CHART_COLORS, fmt } from '../lib/fatura'
 import type { Entry, HotmartSale, Invoice } from '../lib/types'
-import { Card, PageHeader, StatusBadge } from '../components/ui'
+import { Card, PageHeader, StatusBadge, ErroBanner } from '../components/ui'
 
 interface MesAgg { mes: string; receber: number; pagar: number }
 interface CatAgg { nome: string; valor: number; cor: string }
@@ -26,8 +26,11 @@ export default function Dashboard() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [txs, setTxs] = useState<TxLite[]>([])
   const [categorias, setCategorias] = useState<CatRow[]>([])
+  const [erro, setErro] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
+    setErro(null)
+    const erros: string[] = []
     // ── janela do fluxo financeiro: -5 a +2 meses ──
     const ini = new Date()
     ini.setMonth(ini.getMonth() - 5)
@@ -39,21 +42,28 @@ export default function Dashboard() {
 
     let ql = supabase.from('entries').select('*').neq('status', 'cancelled').gte('due_date', inicio).lte('due_date', fimStr)
     if (empresaAtiva) ql = ql.eq('company_id', empresaAtiva.id)
-    const { data: ls } = await ql
+    const { data: ls, error: e1 } = await ql
+    if (e1) erros.push('lançamentos: ' + e1.message)
     setLancamentos((ls as Entry[]) ?? [])
 
     let qv = supabase.from('hotmart_sales').select('*').gte('sale_date', inicio)
     if (empresaAtiva) qv = qv.eq('company_id', empresaAtiva.id)
-    const { data: vs } = await qv
+    const { data: vs, error: e2 } = await qv
+    if (e2) erros.push('hotmart: ' + e2.message)
     setVendas((vs as HotmartSale[]) ?? [])
 
     // ── cartão: dados reais (faturas/transações vivas) ──
-    const { data: invs } = await supabase.from('invoices').select('*').order('imported_at', { ascending: false })
+    const { data: invs, error: e3 } = await supabase.from('invoices').select('*').order('imported_at', { ascending: false })
+    if (e3) erros.push('faturas: ' + e3.message)
     setInvoices(invs ?? [])
-    const { data: tx } = await supabase.from('transactions').select('amount, category')
+    const { data: tx, error: e4 } = await supabase.from('transactions').select('amount, category')
+    if (e4) erros.push('transações: ' + e4.message)
     setTxs((tx as TxLite[]) ?? [])
-    const { data: cats } = await supabase.from('categories').select('name, color_index').order('created_at')
+    const { data: cats, error: e5 } = await supabase.from('categories').select('name, color_index').order('created_at')
+    if (e5) erros.push('categorias: ' + e5.message)
     setCategorias(cats ?? [])
+
+    if (erros.length) setErro('Erro ao carregar o dashboard — os números podem estar incompletos. ' + erros.join(' · '))
   }, [empresaAtiva])
 
   useEffect(() => { carregar() }, [carregar])
@@ -115,6 +125,8 @@ export default function Dashboard() {
   return (
     <div>
       <PageHeader titulo="Dashboard" subtitulo={empresaAtiva ? empresaAtiva.name : 'Visão consolidada'} />
+
+      <ErroBanner mensagem={erro} />
 
       {/* ── Cartão de crédito (dados reais) ── */}
       <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">💳 Cartão de crédito</h3>

@@ -19,12 +19,9 @@ function DonutChart({ entries, grandTotal }: { entries: EntryAgg[]; grandTotal: 
   const size = 150, cx = 75, cy = 75, r = 56, inner = 34
   if (!grandTotal) return null
 
-  let cum = 0
-  const slices = entries.map((e) => {
-    const start = cum
-    cum += e.pct / 100
-    return { ...e, start, end: cum }
-  })
+  // cumulativo sem reassinalar variável durante o render (regra do React 19)
+  const ends = entries.reduce<number[]>((acc, e) => [...acc, (acc[acc.length - 1] ?? 0) + e.pct / 100], [])
+  const slices = entries.map((e, i) => ({ ...e, start: i === 0 ? 0 : ends[i - 1], end: ends[i] }))
 
   const pt = (pct: number, radius: number) => {
     const a = pct * 2 * Math.PI - Math.PI / 2

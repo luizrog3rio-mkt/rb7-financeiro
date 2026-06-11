@@ -1,8 +1,7 @@
 // Export CSV/XLSX da fatura — contrato #9: CSV pt-BR (BOM + ';' + vírgula
 // decimal + CRLF + "Sem categoria" fallback), nomes de arquivo fixos, XLSX
-// com formato numérico e mesmas colunas. xlsx agora é dependência npm
-// empacotada (antes: SheetJS via CDN em runtime).
-import * as XLSX from 'xlsx'
+// com formato numérico e mesmas colunas. O xlsx entra por dynamic import:
+// são ~400 kB que só servem pro botão exportar — fora do bundle inicial.
 
 interface TxExport {
   date: string
@@ -24,7 +23,8 @@ export function exportCSV(transactions: TxExport[]) {
   triggerDownload(blob, 'fatura_categorizada.csv')
 }
 
-export function exportXLSX(transactions: TxExport[]) {
+export async function exportXLSX(transactions: TxExport[]) {
+  const XLSX = await import('xlsx')
   const rows = transactions.map((t) => ({
     Data: t.date,
     Descrição: t.memo,

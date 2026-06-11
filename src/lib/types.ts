@@ -92,7 +92,8 @@ export interface HotmartSale {
   imported_at: string
 }
 
-// ── Tabelas vivas (modelo PT do app original; unificação de categorias = Fase 3) ──
+// ── Tabelas vivas (modelo PT do app original; categoria como TEXTO é decisão
+//    de design — Fase 3 auditou e manteve: dado íntegro, sem FK) ──
 
 export interface Category {
   id: string
@@ -106,7 +107,7 @@ export interface AutoRule {
   id: string
   user_id: string
   keywords: string[]
-  category: string // nome da categoria (texto livre; vira FK na Fase 3)
+  category: string // nome da categoria (texto por design; Fase 3 manteve)
   created_at: string | null
 }
 
@@ -127,7 +128,7 @@ export interface Transaction {
   fit_id: string | null // NÃO é único (Sicoob repete entre parcelas/faturas)
   memo: string
   amount: number // sempre positivo no modelo vivo (despesa de cartão)
-  date: string // 'DD/MM/YYYY' em texto (Fase 3 converte pra date)
+  date: string // 'DD/MM/YYYY' em texto (formato vivo; Fase 3 manteve)
   category: string | null // nome da categoria (texto livre)
   auto_categorized: boolean | null
   created_at: string | null

@@ -173,7 +173,7 @@ export default function Hotmart() {
 
       <Card>
         {vendas.length === 0 ? (
-          <Vazio mensagem="Nenhuma venda importada. Exporte o relatório de vendas da Hotmart em CSV e importe acima." />
+          <Vazio mensagem="Nenhuma venda ainda. Clique em Sincronizar com a Hotmart acima — ou importe um CSV exportado de lá." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

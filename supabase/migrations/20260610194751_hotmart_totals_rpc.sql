@@ -1,7 +1,8 @@
 -- ============================================================================
 -- hotmart_totals — agregação de vendas Hotmart pros KPIs (Fase 2 / sync API)
 -- ============================================================================
--- Version placeholder — renomear pós-apply (rito do projeto).
+-- APLICADA em 2026-06-10 via MCP — version vivo 20260610194751 (renomeada do
+-- placeholder). Verificada: hotmart_totals(RB7) = 1580 vendas no período.
 --
 -- Por quê: o PostgREST limita respostas a 1000 linhas (max-rows), então somar
 -- bruto/taxas/líquido no cliente undercount com volume alto (a Hotmart traz

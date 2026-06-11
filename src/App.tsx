@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppProvider, useApp } from './contexts/AppContext'
 import Layout from './components/Layout'
@@ -9,8 +10,10 @@ import Compras from './pages/Compras'
 import Lancamentos from './pages/Lancamentos'
 import Extrato from './pages/Extrato'
 import Hotmart from './pages/Hotmart'
-import Dashboard from './pages/Dashboard'
 import Categorias from './pages/Categorias'
+
+// Dashboard carrega o recharts (centenas de kB) — lazy tira do bundle inicial
+const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 function Rotas() {
   const { session, carregando } = useApp()
@@ -28,7 +31,14 @@ function Rotas() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<Dashboard />} />
+        <Route
+          path="/"
+          element={
+            <Suspense fallback={<div className="text-slate-400 text-sm p-8">Carregando…</div>}>
+              <Dashboard />
+            </Suspense>
+          }
+        />
         <Route path="/faturas" element={<Faturas />} />
         <Route path="/faturas/:id" element={<Fatura />} />
         <Route path="/compras" element={<Compras />} />

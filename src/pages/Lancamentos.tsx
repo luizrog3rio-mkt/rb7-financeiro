@@ -11,8 +11,8 @@ import { Card, PageHeader, StatusBadge, Badge, Vazio, Modal, ErroBanner, inputCl
 // pro schema EN (tabela `entries`). Adaptações vs a fonte:
 //  - `lancamentos`→`entries` e todas as colunas PT→EN; enums EN.
 //  - categoria referencia a tabela VIVA `categories` (color_index, sem
-//    dimensão pagar/receber — Fase 1c); ambos os tipos compartilham a mesma
-//    lista de categorias até a Fase 3 unificar.
+//    dimensão pagar/receber); ambos os tipos compartilham a mesma lista —
+//    decisão mantida pela Fase 3.
 //  - embed de accounts precisa do hint !account_id (entries tem 2 FKs pra
 //    accounts: account_id e invoice_account_id → PGRST201 sem o hint).
 //  - erros aparecem em banner (o rb7 também engolia).
@@ -72,7 +72,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   useEffect(() => { carregar() }, [carregar])
 
   useEffect(() => {
-    // categorias vivas (compartilhadas entre pagar/receber até a Fase 3)
+    // categorias vivas (compartilhadas entre pagar/receber, por design)
     supabase.from('categories').select('*').order('name').then(({ data }) => setCategorias(data ?? []))
     supabase.from('accounts').select('*').eq('active', true).order('name').then(({ data }) => setContas(data ?? []))
   }, [])

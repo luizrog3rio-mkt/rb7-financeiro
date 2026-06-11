@@ -59,10 +59,19 @@ export default function Categorias() {
       const { error } = await supabase.from(TABELA[vocab]).update({ name: nome, color_index: form.colorIndex }).eq('id', form.id)
       if (error) { setErro('Erro ao salvar: ' + error.message); return }
       // cascade do rename nos refs de TEXTO (FK refs como entries.category_id
-      // acompanham por id automaticamente)
+      // acompanham por id automaticamente). Falha aqui deixaria rótulos órfãos
+      // em silêncio — por isso o erro PRECISA aparecer.
       if (original && original.name !== nome) {
+        const falhas: string[] = []
         for (const ref of TEXT_REFS[vocab]) {
-          await supabase.from(ref.tabela).update({ [ref.col]: nome }).eq(ref.col, original.name)
+          const { error: eRef } = await supabase.from(ref.tabela).update({ [ref.col]: nome }).eq(ref.col, original.name)
+          if (eRef) falhas.push(`${ref.tabela}: ${eRef.message}`)
+        }
+        if (falhas.length) {
+          setErro(
+            `A categoria foi renomeada, mas falhou ao atualizar os rótulos em: ${falhas.join(' · ')}. ` +
+            `Itens antigos podem ter ficado com o nome "${original.name}" — renomeie de volta e tente de novo.`
+          )
         }
       }
     } else {

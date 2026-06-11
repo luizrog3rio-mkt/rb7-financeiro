@@ -41,10 +41,13 @@ export default function Contas() {
     if (!cts) { setContas([]); return }
 
     const ids = cts.map((c) => c.id)
-    const { data: ofx } = await supabase
+    const { data: ofx, error: eOfx } = await supabase
       .from('bank_transactions').select('account_id, amount').in('account_id', ids)
-    const { data: lanc } = await supabase
+    const { data: lanc, error: eLanc } = await supabase
       .from('entries').select('account_id, type, amount').eq('status', 'paid').in('account_id', ids)
+    if (eOfx || eLanc) {
+      setErro('Erro ao calcular saldos (mostrando só o saldo inicial): ' + (eOfx?.message ?? eLanc?.message))
+    }
 
     const somaOfx = new Map<string, number>()
     ofx?.forEach((t) => somaOfx.set(t.account_id, (somaOfx.get(t.account_id) ?? 0) + Number(t.amount)))
