@@ -54,6 +54,7 @@ export interface Entry {
   counterparty: string | null
   notes: string | null
   is_recurring: boolean
+  recurrence_day: number | null // dia-âncora da série recorrente (1-31); null se não recorrente
   invoice_account_id: string | null
   invoice_month: string | null
   created_by: string | null

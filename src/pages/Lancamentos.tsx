@@ -33,6 +33,8 @@ interface FormState {
   counterparty: string
   notes: string
   is_recurring: boolean
+  recurrence_day?: number | null // dia-âncora da série (carregado na edição)
+  dueOriginal?: string // vencimento antes da edição (p/ decidir se re-ancora a série)
 }
 
 const formVazio = (companyId: string): FormState => ({
@@ -191,6 +193,8 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       counterparty: l.counterparty ?? '',
       notes: l.notes ?? '',
       is_recurring: l.is_recurring ?? false,
+      recurrence_day: l.recurrence_day ?? null,
+      dueOriginal: l.due_date,
     })
     setModalAberto(true)
   }, [])
@@ -200,18 +204,18 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   const inserirProximoMes = useCallback(async (b: {
     company_id: string; account_id: string | null; category_id: string | null
     type: EntryType; description: string; amount: number; due_date: string
-    counterparty: string | null; notes: string | null
+    counterparty: string | null; notes: string | null; recurrence_day: number | null
   }) => {
-    // avança 1 mês com "clamp" no último dia do mês alvo (vencimento dia 31 cai
-    // em 28/30 quando o mês não tem o dia) — evita o overflow do setMonth do JS,
-    // que pularia meses curtos (31/01 → 03/03). Monta a data por string p/ não
-    // sofrer deslocamento de fuso.
+    // avança 1 mês mantendo o DIA-ÂNCORA da série (recurrence_day): só faz clamp
+    // no mês que não tem o dia (31 → 28/fev) e volta ao dia cheio no próximo mês
+    // que o comporta (→ 31/mar). Monta a data por string p/ não sofrer fuso.
     const [y, m, d] = b.due_date.split('-').map(Number) // m: 1-12
+    const diaAncora = b.recurrence_day ?? d
     const alvo = new Date(y, m, 1) // 1º dia do mês seguinte (JS é 0-based: índice m = mês m+1)
     const ano = alvo.getFullYear()
     const mes = alvo.getMonth() + 1 // 1-12
     const ultimoDia = new Date(ano, mes, 0).getDate()
-    const due = `${ano}-${String(mes).padStart(2, '0')}-${String(Math.min(d, ultimoDia)).padStart(2, '0')}`
+    const due = `${ano}-${String(mes).padStart(2, '0')}-${String(Math.min(diaAncora, ultimoDia)).padStart(2, '0')}`
     // idempotência: não duplica se o lançamento desse mês da série já existe
     // (cobre re-pagamento: paid → to_pay → paid)
     const { data: existe } = await supabase.from('entries').select('id')
@@ -230,6 +234,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       notes: b.notes,
       status: 'to_pay' as EntryStatus,
       is_recurring: true,
+      recurrence_day: diaAncora,
       created_by: session?.user.id ?? null,
     })).error
   }, [session])
@@ -240,6 +245,13 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     setErro(null)
     const status = form.status
     const payment_date = status === 'paid' && !form.payment_date ? hoje() : form.payment_date || null
+    // dia-âncora da recorrência: novo lançamento ou alteração do vencimento
+    // (re)ancora no dia do vencimento; edição que não mexe no venc preserva o dia
+    const recurrence_day = form.is_recurring
+      ? (!form.id || form.due_date !== form.dueOriginal
+          ? Number(form.due_date.split('-')[2])
+          : form.recurrence_day ?? Number(form.due_date.split('-')[2]))
+      : null
     const payload = {
       company_id: form.company_id,
       account_id: form.account_id || null,
@@ -254,6 +266,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       counterparty: form.counterparty || null,
       notes: form.notes || null,
       is_recurring: form.is_recurring,
+      recurrence_day,
       ...(form.id ? {} : { created_by: session?.user.id }),
     }
     const { error } = form.id
@@ -275,6 +288,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         due_date: payload.due_date,
         counterparty: payload.counterparty,
         notes: payload.notes,
+        recurrence_day,
       })
       if (errRec) setErro('Lançamento salvo, mas não foi possível gerar a recorrência do próximo mês: ' + errRec.message)
     }
@@ -302,6 +316,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         due_date: l.due_date,
         counterparty: l.counterparty ?? null,
         notes: l.notes ?? null,
+        recurrence_day: l.recurrence_day,
       })
       if (errRec) setErro('Pago com sucesso, mas não foi possível gerar a recorrência do próximo mês: ' + errRec.message)
     }
