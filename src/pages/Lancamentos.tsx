@@ -120,6 +120,10 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   const [categorias, setCategorias] = useState<Category[]>([])
   const [contas, setContas] = useState<Account[]>([])
   const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [filtroEmpresa, setFiltroEmpresa] = useState('')
+  const [dataDe, setDataDe] = useState('')
+  const [dataAte, setDataAte] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [form, setForm] = useState<FormState>(formVazio(''))
   const [salvando, setSalvando] = useState(false)
@@ -140,12 +144,18 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       .select('*, category:categories(*), account:accounts!account_id(*)')
       .eq('type', tipo)
       .order('due_date')
-    if (empresaAtiva) q = q.eq('company_id', empresaAtiva.id)
+    // empresa: filtro local da tela tem precedência sobre o escopo global
+    const escopoEmpresa = filtroEmpresa || empresaAtiva?.id
+    if (escopoEmpresa) q = q.eq('company_id', escopoEmpresa)
     if (filtroStatus) q = q.eq('status', filtroStatus)
+    if (filtroCategoria === '__none__') q = q.is('category_id', null)
+    else if (filtroCategoria) q = q.eq('category_id', filtroCategoria)
+    if (dataDe) q = q.gte('due_date', dataDe)
+    if (dataAte) q = q.lte('due_date', dataAte)
     const { data, error } = await q
     if (error) { setErro('Erro ao carregar lançamentos: ' + error.message); return }
     setLancamentos((data as Entry[]) ?? [])
-  }, [tipo, empresaAtiva, filtroStatus])
+  }, [tipo, empresaAtiva, filtroStatus, filtroCategoria, filtroEmpresa, dataDe, dataAte])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -351,6 +361,15 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     pago: lancamentos.filter((l) => l.status === 'paid').reduce((s, l) => s + Number(l.amount), 0),
   }), [lancamentos])
 
+  const temFiltro = !!(filtroStatus || filtroCategoria || filtroEmpresa || dataDe || dataAte)
+  const limparFiltros = () => {
+    setFiltroStatus('')
+    setFiltroCategoria('')
+    setFiltroEmpresa('')
+    setDataDe('')
+    setDataAte('')
+  }
+
   const ehPagar = tipo === 'payable'
 
   const colunas = useMemo<DataColumn<Entry>[]>(() => [
@@ -431,15 +450,50 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         </Card>
       </div>
 
-      <div className="mb-4">
-        <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className={inputCls + ' max-w-48'}>
-          <option value="">Todos os status</option>
-          <option value="to_pay">{ehPagar ? 'A pagar' : 'A receber'}</option>
-          <option value="pending">Pendente</option>
-          <option value="paid">{ehPagar ? 'Pago' : 'Recebido'}</option>
-          <option value="cancelled">Cancelado</option>
-        </select>
-      </div>
+      <Card className="p-4 mb-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="w-40">
+            <label className="block text-sm font-medium mb-1">Vencimento — de</label>
+            <input type="date" max={dataAte || undefined} className={inputCls} value={dataDe} onChange={(e) => setDataDe(e.target.value)} />
+          </div>
+          <div className="w-40">
+            <label className="block text-sm font-medium mb-1">até</label>
+            <input type="date" min={dataDe || undefined} className={inputCls} value={dataAte} onChange={(e) => setDataAte(e.target.value)} />
+          </div>
+          <div className="w-48">
+            <label className="block text-sm font-medium mb-1">Categoria</label>
+            <select className={inputCls} value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value)}>
+              <option value="">Todas as categorias</option>
+              <option value="__none__">Sem categoria</option>
+              {categorias.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="w-44">
+            <label className="block text-sm font-medium mb-1">Status</label>
+            <select className={inputCls} value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}>
+              <option value="">Todos os status</option>
+              <option value="to_pay">{ehPagar ? 'A pagar' : 'A receber'}</option>
+              <option value="pending">Pendente</option>
+              <option value="paid">{ehPagar ? 'Pago' : 'Recebido'}</option>
+              <option value="cancelled">Cancelado</option>
+            </select>
+          </div>
+          {empresas.length > 1 && (
+            <div className="w-48">
+              <label className="block text-sm font-medium mb-1">Empresa</label>
+              <select className={inputCls} value={filtroEmpresa} onChange={(e) => setFiltroEmpresa(e.target.value)}>
+                <option value="">{empresaAtiva ? `Apenas ${empresaAtiva.name}` : 'Todas as empresas'}</option>
+                {empresas.filter((e) => e.id !== empresaAtiva?.id).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </div>
+          )}
+          {temFiltro && (
+            <button type="button" onClick={limparFiltros} className="text-sm text-slate-500 hover:text-red-600 underline pb-2">
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </Card>
 
       <Card>
         {lancamentos.length === 0 ? (
