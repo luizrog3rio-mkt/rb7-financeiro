@@ -50,7 +50,6 @@ export default function PurchaseItemsTab({
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState<string | null>(null)
-  const [month, setMonth] = useState(currentMonth())
   const [purchaseDate, setPurchaseDate] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('')
 
@@ -66,7 +65,8 @@ export default function PurchaseItemsTab({
       description: desc,
       amount,
       category,
-      month: isPending ? month : null,
+      // mês de competência derivado da data da compra (campo único); sem data, usa o mês atual
+      month: isPending ? (purchaseDate ? purchaseDate.slice(0, 7) : currentMonth()) : null,
       purchaseDate,
       paymentMethod,
     })
@@ -119,13 +119,6 @@ export default function PurchaseItemsTab({
             style={{ width: 130, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#334155', background: '#f8fafc' }}
           />
           <TagSelector value={category} categories={categories} onChange={setCategory} onAddCategory={onAddCategory} />
-          {isPending && (
-            <input
-              type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#334155', background: '#f8fafc' }}
-              title="Mês"
-            />
-          )}
           <button
             onClick={handleAdd}
             disabled={!description.trim()}
