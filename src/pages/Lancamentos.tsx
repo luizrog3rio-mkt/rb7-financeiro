@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Plus, Pencil, CheckCircle2, Trash2, ArrowRight, Repeat, Upload } from 'lucide-react'
+import { Plus, Pencil, CheckCircle2, Trash2, ArrowRight, Repeat, Upload, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
 import { fmtBRL, fmtData, hoje } from '../lib/format'
@@ -7,6 +7,7 @@ import { corDaCategoria } from '../lib/fatura'
 import type { Account, Category, Entry, EntryType, EntryStatus } from '../lib/types'
 import { Card, PageHeader, StatusBadge, Badge, Vazio, Modal, ErroBanner, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 import DataTable, { type DataColumn } from '../components/DataTable'
+import DateRangePicker from '../components/DateRangePicker'
 
 // Etapa 4 — Contas a Pagar/Receber. Port do Lancamentos.tsx do rb7 adaptado
 // pro schema EN (tabela `entries`). Adaptações vs a fonte:
@@ -131,6 +132,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [dataDe, setDataDe] = useState('')
   const [dataAte, setDataAte] = useState('')
+  const [busca, setBusca] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [form, setForm] = useState<FormState>(formVazio(''))
   const [salvando, setSalvando] = useState(false)
@@ -427,17 +429,28 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     [importLinhas, importColIdx]
   )
 
+  // busca textual (descrição/contraparte) aplicada no cliente — instantânea e
+  // sem nova requisição por tecla (entries é uma tabela pequena)
+  const lancamentosExibidos = useMemo(() => {
+    const q = normalizar(busca) // ignora acento/caixa, igual ao fluxo de import
+    if (!q) return lancamentos
+    return lancamentos.filter((l) =>
+      normalizar(l.description).includes(q) || normalizar(l.counterparty ?? '').includes(q)
+    )
+  }, [lancamentos, busca])
+
   const totais = useMemo(() => ({
-    aPagar: lancamentos.filter((l) => l.status === 'to_pay').reduce((s, l) => s + Number(l.amount), 0),
-    pendente: lancamentos.filter((l) => l.status === 'pending').reduce((s, l) => s + Number(l.amount), 0),
-    pago: lancamentos.filter((l) => l.status === 'paid').reduce((s, l) => s + Number(l.amount), 0),
-  }), [lancamentos])
+    aPagar: lancamentosExibidos.filter((l) => l.status === 'to_pay').reduce((s, l) => s + Number(l.amount), 0),
+    pendente: lancamentosExibidos.filter((l) => l.status === 'pending').reduce((s, l) => s + Number(l.amount), 0),
+    pago: lancamentosExibidos.filter((l) => l.status === 'paid').reduce((s, l) => s + Number(l.amount), 0),
+  }), [lancamentosExibidos])
 
   // se o filtro de empresa coincide com o escopo global, trata como "sem filtro"
   // (a empresa ativa é omitida das opções — evita o select renderizar em branco)
   const filtroEmpresaVisivel = filtroEmpresa && filtroEmpresa !== empresaAtiva?.id ? filtroEmpresa : ''
-  const temFiltro = !!(filtroStatus || filtroCategoria || filtroEmpresaVisivel || dataDe || dataAte)
+  const temFiltro = !!(busca || filtroStatus || filtroCategoria || filtroEmpresaVisivel || dataDe || dataAte)
   const limparFiltros = () => {
+    setBusca('')
     setFiltroStatus('')
     setFiltroCategoria('')
     setFiltroEmpresa('')
@@ -527,13 +540,21 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
 
       <Card className="p-4 mb-4">
         <div className="flex flex-wrap items-end gap-4">
-          <div className="w-40">
-            <label className="block text-sm font-medium mb-1">Vencimento — de</label>
-            <input type="date" max={dataAte || undefined} className={inputCls} value={dataDe} onChange={(e) => setDataDe(e.target.value)} />
+          <div className="w-64">
+            <label className="block text-sm font-medium mb-1">Buscar</label>
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                className={inputCls + ' pl-9'}
+                placeholder={`Descrição ou ${ehPagar ? 'fornecedor' : 'cliente'}…`}
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="w-40">
-            <label className="block text-sm font-medium mb-1">até</label>
-            <input type="date" min={dataDe || undefined} className={inputCls} value={dataAte} onChange={(e) => setDataAte(e.target.value)} />
+          <div>
+            <label className="block text-sm font-medium mb-1">Vencimento</label>
+            <DateRangePicker de={dataDe} ate={dataAte} onChange={(d, a) => { setDataDe(d); setDataAte(a) }} />
           </div>
           <div className="w-48">
             <label className="block text-sm font-medium mb-1">Categoria</label>
@@ -571,13 +592,13 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       </Card>
 
       <Card>
-        {lancamentos.length === 0 ? (
-          <Vazio mensagem="Nenhum lançamento encontrado." />
+        {lancamentosExibidos.length === 0 ? (
+          <Vazio mensagem={busca && lancamentos.length > 0 ? 'Nenhum lançamento para essa busca.' : 'Nenhum lançamento encontrado.'} />
         ) : (
           <DataTable
             tableKey={`lancamentos:${tipo}`}
             columns={colunas}
-            data={lancamentos}
+            data={lancamentosExibidos}
             getRowId={(l) => l.id}
           />
         )}
