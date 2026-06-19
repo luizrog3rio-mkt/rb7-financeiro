@@ -102,6 +102,7 @@ export default function Layout() {
         >
           <LogOut size={16} /> Sair
         </button>
+        <p className="px-6 pb-3 text-[10px] text-slate-600">versão {__APP_VERSION__}</p>
       </aside>
       <main className="flex-1 ml-60 p-6">
         <Outlet />
