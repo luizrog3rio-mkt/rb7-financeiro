@@ -1,12 +1,13 @@
 import { useState } from 'react'
+import { Plus, Trash2, ShoppingCart, Calendar, Lightbulb } from 'lucide-react'
 import TagSelector from './TagSelector'
-import { S } from './estilos'
 import { currentMonth, formatMonth, type CatUI } from '../../lib/fatura'
 import type { PurchaseItem } from '../../lib/types'
+import { Card, btnPrimario } from '../ui'
 import ColumnVisibilityMenu, { type ColMeta } from '../ColumnVisibilityMenu'
 import { useColumnPrefs } from '../../hooks/useColumnPrefs'
 
-// colunas ocultáveis (só esconder — mundo fatura é travado, sem drag/resize)
+// colunas ocultáveis (só esconder — a tabela de compras tem edição inline)
 const PI_COLS: ColMeta[] = [
   { id: 'date', label: 'Data' },
   { id: 'description', label: 'Descrição' },
@@ -15,9 +16,9 @@ const PI_COLS: ColMeta[] = [
   { id: 'category', label: 'Categoria' },
 ]
 
-// Port 1:1 da PurchaseItemsTab do App.jsx — anotações de compra (contrato #8:
-// não entram em totais; valor opcional; edição inline por blur; exclusão de
-// ITEM sem confirm). isPending=true = view global de pendentes agrupada por mês.
+// Anotações de compra (contrato #8: não entram em totais; valor opcional; edição
+// inline por blur; exclusão de ITEM sem confirm). isPending=true = view global de
+// pendentes agrupada por mês. Padronizado no design system (Card + Tailwind).
 
 export interface NovoItem {
   description: string
@@ -27,6 +28,9 @@ export interface NovoItem {
   purchaseDate: string
   paymentMethod: string
 }
+
+const editCls = 'w-full bg-transparent border border-transparent focus:border-slate-300 rounded-md px-1.5 py-1 text-sm text-slate-700 outline-none'
+const formCls = 'rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500'
 
 export default function PurchaseItemsTab({
   items,
@@ -84,57 +88,54 @@ export default function PurchaseItemsTab({
   const groupKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
 
   return (
-    <div style={{ padding: 20 }}>
-      {!readOnly && <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 10 }}>
-          Adicionar item de compra
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            type="date" value={purchaseDate}
-            onChange={(e) => setPurchaseDate(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
-            title="Data da compra"
-            style={{ width: 145, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#334155', background: '#f8fafc' }}
-          />
-          <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
-            placeholder="O que você comprou?"
-            style={{ flex: '1 1 200px', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#334155', background: '#f8fafc' }}
-          />
-          <input
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
-            placeholder="Forma de pagamento"
-            style={{ width: 160, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#334155', background: '#f8fafc' }}
-          />
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
-            type="number" step="0.01" placeholder="Valor (opcional)"
-            style={{ width: 130, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 12px', fontSize: 13, outline: 'none', color: '#334155', background: '#f8fafc' }}
-          />
-          <TagSelector value={category} categories={categories} onChange={setCategory} onAddCategory={onAddCategory} />
-          <button
-            onClick={handleAdd}
-            disabled={!description.trim()}
-            style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: description.trim() ? 'pointer' : 'not-allowed', opacity: description.trim() ? 1 : 0.5 }}
-          >
-            + Adicionar
-          </button>
-        </div>
-        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#94a3b8' }}>
-          💡 Itens aqui são anotações — não entram em totais nem no dashboard.
-          {isPending && ' Ao importar uma fatura, você poderá selecionar quais itens incluir.'}
-        </p>
-      </div>}
+    <div>
+      {!readOnly && (
+        <Card className="p-4 mb-4">
+          <div className="font-semibold text-sm text-slate-800 mb-2.5">Adicionar item de compra</div>
+          <div className="flex gap-2 flex-wrap items-center">
+            <input
+              type="date" value={purchaseDate}
+              onChange={(e) => setPurchaseDate(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+              title="Data da compra"
+              className={`${formCls} w-36`}
+            />
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+              placeholder="O que você comprou?"
+              className={`${formCls} flex-1 min-w-[200px]`}
+            />
+            <input
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+              placeholder="Forma de pagamento"
+              className={`${formCls} w-40`}
+            />
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd() }}
+              type="number" step="0.01" placeholder="Valor (opcional)"
+              className={`${formCls} w-36`}
+            />
+            <TagSelector value={category} categories={categories} onChange={setCategory} onAddCategory={onAddCategory} />
+            <button onClick={handleAdd} disabled={!description.trim()} className={btnPrimario}>
+              <Plus size={16} /> Adicionar
+            </button>
+          </div>
+          <p className="flex items-center gap-1.5 mt-2.5 text-xs text-slate-400">
+            <Lightbulb size={13} className="shrink-0" />
+            Itens aqui são anotações — não entram em totais nem no dashboard.
+            {isPending && ' Ao importar uma fatura, você poderá selecionar quais itens incluir.'}
+          </p>
+        </Card>
+      )}
 
       {items.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <div className="flex justify-end mb-3">
           <ColumnVisibilityMenu columns={PI_COLS} isVisible={colVisivel} onToggle={alternarCol} onReset={colPrefs.reset} />
         </div>
       )}
@@ -142,115 +143,115 @@ export default function PurchaseItemsTab({
       {groupKeys.map((gk) => {
         const groupItems = grouped[gk]
         return (
-          <div key={gk || 'single'} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
-            <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
-                {isPending ? `📅 ${formatMonth(gk || null)}` : 'Itens desta fatura'}
+          <Card key={gk || 'single'} className="overflow-hidden mb-3">
+            <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-baseline">
+              <span className="flex items-center gap-1.5 font-semibold text-sm text-slate-800">
+                {isPending && <Calendar size={14} className="text-slate-400" />}
+                {isPending ? formatMonth(gk || null) : 'Itens desta fatura'}
               </span>
-              <span style={{ fontSize: 12, color: '#94a3b8' }}>
+              <span className="text-xs text-slate-400">
                 {groupItems.length} {groupItems.length === 1 ? 'item' : 'itens'}
               </span>
             </div>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  {colVisivel('date') && <th style={{ ...S.th, width: 130 }}>Data</th>}
-                  {colVisivel('description') && <th style={{ ...S.th }}>Descrição</th>}
-                  {colVisivel('payment') && <th style={{ ...S.th, width: 150 }}>Pagamento</th>}
-                  {colVisivel('amount') && <th style={{ ...S.th, textAlign: 'right', width: 120 }}>Valor</th>}
-                  {colVisivel('category') && <th style={{ ...S.th, width: 200 }}>Categoria</th>}
-                  <th style={{ ...S.th, width: 50 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {groupItems.map((it) => (
-                  <tr
-                    key={it.id}
-                    style={S.row}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f8fafc')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
-                  >
-                    {colVisivel('date') && (
-                    <td style={S.td}>
-                      <input
-                        type="date" defaultValue={it.purchase_date ?? ''}
-                        onBlur={(e) => { const v = e.target.value || null; if (v !== it.purchase_date) onUpdate(it.id, { purchase_date: v }) }}
-                        style={{ width: 130, border: '1px solid transparent', background: 'transparent', fontSize: 13, color: '#334155', outline: 'none', borderRadius: 6, padding: '4px 6px' }}
-                        onFocus={(e) => (e.target.style.borderColor = '#e2e8f0')}
-                      />
-                    </td>
-                    )}
-                    {colVisivel('description') && (
-                    <td style={S.td}>
-                      <input
-                        defaultValue={it.description}
-                        onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== it.description) onUpdate(it.id, { description: v }) }}
-                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 13, color: '#1e293b', fontWeight: 500, outline: 'none' }}
-                      />
-                    </td>
-                    )}
-                    {colVisivel('payment') && (
-                    <td style={S.td}>
-                      <input
-                        defaultValue={it.payment_method ?? ''}
-                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== it.payment_method) onUpdate(it.id, { payment_method: v }) }}
-                        placeholder="—"
-                        style={{ width: '100%', border: '1px solid transparent', background: 'transparent', fontSize: 13, color: '#334155', outline: 'none', borderRadius: 6, padding: '4px 6px' }}
-                        onFocus={(e) => (e.target.style.borderColor = '#e2e8f0')}
-                      />
-                    </td>
-                    )}
-                    {colVisivel('amount') && (
-                    <td style={{ ...S.td, textAlign: 'right' }}>
-                      <input
-                        type="number" step="0.01"
-                        defaultValue={it.amount ?? ''}
-                        onBlur={(e) => {
-                          const raw = e.target.value
-                          const v = raw === '' ? null : Number(raw)
-                          if (v !== it.amount) onUpdate(it.id, { amount: v })
-                        }}
-                        placeholder="—"
-                        style={{ width: 100, textAlign: 'right', border: '1px solid transparent', background: 'transparent', fontSize: 13, color: '#0f172a', fontWeight: 700, outline: 'none', borderRadius: 6, padding: '4px 6px' }}
-                        onFocus={(e) => (e.target.style.borderColor = '#e2e8f0')}
-                      />
-                    </td>
-                    )}
-                    {colVisivel('category') && (
-                    <td style={S.td}>
-                      <TagSelector
-                        value={it.category}
-                        categories={categories}
-                        onChange={(cat) => onUpdate(it.id, { category: cat })}
-                        onAddCategory={onAddCategory}
-                      />
-                    </td>
-                    )}
-                    {!readOnly && (
-                    <td style={S.td}>
-                      <button
-                        onClick={() => onDelete(it.id)}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#cbd5e1', fontSize: 14, padding: '4px 8px', borderRadius: 6 }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = '#cbd5e1')}
-                        title="Excluir"
-                      >✕</button>
-                    </td>
-                    )}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    {colVisivel('date') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 w-36">Data</th>}
+                    {colVisivel('description') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Descrição</th>}
+                    {colVisivel('payment') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 w-40">Pagamento</th>}
+                    {colVisivel('amount') && <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-slate-500 w-32">Valor</th>}
+                    {colVisivel('category') && <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500 w-52">Categoria</th>}
+                    {!readOnly && <th className="w-12" />}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {groupItems.map((it) => (
+                    <tr key={it.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      {colVisivel('date') && (
+                        <td className="px-4 py-2 align-middle">
+                          <input
+                            type="date" defaultValue={it.purchase_date ?? ''}
+                            onBlur={(e) => { const v = e.target.value || null; if (v !== it.purchase_date) onUpdate(it.id, { purchase_date: v }) }}
+                            disabled={readOnly}
+                            className={editCls}
+                          />
+                        </td>
+                      )}
+                      {colVisivel('description') && (
+                        <td className="px-4 py-2 align-middle">
+                          <input
+                            defaultValue={it.description}
+                            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== it.description) onUpdate(it.id, { description: v }) }}
+                            disabled={readOnly}
+                            className="w-full bg-transparent border-none text-sm text-slate-800 font-medium outline-none"
+                          />
+                        </td>
+                      )}
+                      {colVisivel('payment') && (
+                        <td className="px-4 py-2 align-middle">
+                          <input
+                            defaultValue={it.payment_method ?? ''}
+                            onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== it.payment_method) onUpdate(it.id, { payment_method: v }) }}
+                            placeholder="—"
+                            disabled={readOnly}
+                            className={editCls}
+                          />
+                        </td>
+                      )}
+                      {colVisivel('amount') && (
+                        <td className="px-4 py-2 align-middle text-right">
+                          <input
+                            type="number" step="0.01"
+                            defaultValue={it.amount ?? ''}
+                            onBlur={(e) => {
+                              const raw = e.target.value
+                              const v = raw === '' ? null : Number(raw)
+                              if (v !== it.amount) onUpdate(it.id, { amount: v })
+                            }}
+                            placeholder="—"
+                            disabled={readOnly}
+                            className={`${editCls} text-right font-semibold text-slate-800`}
+                          />
+                        </td>
+                      )}
+                      {colVisivel('category') && (
+                        <td className="px-4 py-2 align-middle">
+                          <TagSelector
+                            value={it.category}
+                            categories={categories}
+                            onChange={(cat) => onUpdate(it.id, { category: cat })}
+                            onAddCategory={onAddCategory}
+                            readOnly={readOnly}
+                          />
+                        </td>
+                      )}
+                      {!readOnly && (
+                        <td className="px-4 py-2 align-middle">
+                          <button
+                            onClick={() => onDelete(it.id)}
+                            className="text-slate-300 hover:text-red-500 p-1 rounded transition"
+                            title="Excluir"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         )
       })}
 
       {items.length === 0 && (
-        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '48px 24px', textAlign: 'center', color: '#94a3b8' }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🛒</div>
-          <p style={{ margin: 0, fontSize: 14 }}>Nenhum item lançado ainda</p>
-        </div>
+        <Card className="py-12 px-6 text-center text-slate-400">
+          <div className="flex justify-center mb-2"><ShoppingCart size={36} /></div>
+          <p className="text-sm">Nenhum item lançado ainda</p>
+        </Card>
       )}
     </div>
   )

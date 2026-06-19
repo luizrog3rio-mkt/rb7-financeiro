@@ -64,23 +64,20 @@ export default function Compras() {
   return (
     <div>
       <PageHeader
-        titulo="🛒 Compras pendentes"
+        titulo="Compras pendentes"
         subtitulo="Anotações aguardando a próxima fatura — não entram em totais nem no dashboard"
       />
       <ErroBanner mensagem={erro ?? erroWorld} />
-      {/* a tab tem padding próprio (20px) — margem negativa alinha às bordas da página */}
-      <div style={{ margin: '0 -20px' }}>
-        <PurchaseItemsTab
-          items={items}
-          categories={purchaseCategorias}
-          onAdd={addItem}
-          onUpdate={updateItem}
-          onDelete={deleteItem}
-          onAddCategory={addPurchaseCategoria}
-          isPending
-          readOnly={!isAdmin}
-        />
-      </div>
+      <PurchaseItemsTab
+        items={items}
+        categories={purchaseCategorias}
+        onAdd={addItem}
+        onUpdate={updateItem}
+        onDelete={deleteItem}
+        onAddCategory={addPurchaseCategoria}
+        isPending
+        readOnly={!isAdmin}
+      />
     </div>
   )
 }
