@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { RefreshCw, X } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 
 // Avisa quando saiu um deploy novo (a SPA segura o bundle antigo até dar F5).
 // Compara os assets hasheados do /index.html do servidor com os que estão
-// rodando agora; se mudaram, mostra um banner com botão Atualizar. Só em
+// rodando agora; se mudaram, mostra um MODAL central com botão Atualizar. Só em
 // produção (em dev o index não tem /assets/ hasheado). ?previewUpdate=1 força
-// o banner pra dar pra ver o visual.
+// o modal pra dar pra ver o visual.
 
 const INTERVALO_MS = 60_000
 
@@ -27,7 +27,7 @@ function assetsRodando(): string {
   return [...new Set(urls)].sort().join('|')
 }
 
-export default function AtualizacaoBanner() {
+export default function AtualizacaoModal() {
   const forcar = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('previewUpdate')
   const [novaVersao, setNovaVersao] = useState(forcar)
   const [dispensado, setDispensado] = useState(false)
@@ -66,25 +66,29 @@ export default function AtualizacaoBanner() {
   if (!novaVersao || dispensado) return null
 
   return (
-    <div className="fixed bottom-4 right-4 z-[100] flex items-center gap-3 rounded-xl bg-slate-900 text-white shadow-lg ring-1 ring-black/10 pl-4 pr-3 py-3">
-      <RefreshCw size={16} className="text-indigo-300 shrink-0" />
-      <div className="text-sm">
-        <span className="font-semibold">Nova versão disponível</span>
-        <span className="text-slate-300"> — atualize para ver as novidades.</span>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+        <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+          <RefreshCw size={30} />
+        </div>
+        <h2 className="text-xl font-bold text-slate-800 mb-1.5">Nova versão disponível</h2>
+        <p className="text-sm text-slate-500 mb-6">
+          Saiu uma atualização do sistema. Recarregue a página para usar a versão mais recente.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl px-4 py-3 transition"
+        >
+          <RefreshCw size={18} /> Atualizar agora
+        </button>
+        <button
+          onClick={() => setDispensado(true)}
+          className="mt-3 text-sm text-slate-400 hover:text-slate-600 transition"
+        >
+          Agora não
+        </button>
       </div>
-      <button
-        onClick={() => window.location.reload()}
-        className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg px-3 py-1.5 transition"
-      >
-        Atualizar
-      </button>
-      <button
-        onClick={() => setDispensado(true)}
-        className="text-slate-400 hover:text-white p-1 rounded transition"
-        title="Agora não"
-      >
-        <X size={16} />
-      </button>
     </div>
   )
 }
