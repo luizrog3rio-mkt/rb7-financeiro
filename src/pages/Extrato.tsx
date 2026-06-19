@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Upload } from 'lucide-react'
+import { Upload, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
 import { importarExtratoOFX } from '../lib/importarExtrato'
 import { fmtBRL, fmtData } from '../lib/format'
 import { corDaCategoria } from '../lib/fatura'
 import type { Account, Category, BankTransaction } from '../lib/types'
-import { Card, PageHeader, Badge, Vazio, ErroBanner, inputCls, btnPrimario } from '../components/ui'
+import { Card, PageHeader, Badge, Vazio, ErroBanner, Modal, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 import DataTable, { type DataColumn } from '../components/DataTable'
 
 // Etapa 5 — Extratos (OFX). Port do ImportarOfx.tsx do rb7 pra bank_transactions.
@@ -21,6 +21,10 @@ export default function Extrato() {
   const [msg, setMsg] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [importando, setImportando] = useState(false)
+  const [confirmarLimpar, setConfirmarLimpar] = useState(false)
+  const [limpando, setLimpando] = useState(false)
+  const [qtdParaLimpar, setQtdParaLimpar] = useState<number | null>(null)
+  const [conciliadasParaLimpar, setConciliadasParaLimpar] = useState(0)
 
   useEffect(() => {
     // extrato = conta corrente (cartão tem o fluxo de Faturas; inter-empresa não importa OFX)
@@ -56,6 +60,38 @@ export default function Extrato() {
     setImportando(false)
     if (e) { setMsg(e); return }
     if (ok) setMsg(ok.msg)
+    carregarTransacoes()
+  }
+
+  const abrirLimpar = useCallback(async () => {
+    if (!contaSelecionada) return
+    setErro(null)
+    const { count } = await supabase
+      .from('bank_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', contaSelecionada)
+    const { count: conc } = await supabase
+      .from('bank_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', contaSelecionada)
+      .not('entry_id', 'is', null)
+    setQtdParaLimpar(count ?? 0)
+    setConciliadasParaLimpar(conc ?? 0)
+    setConfirmarLimpar(true)
+  }, [contaSelecionada])
+
+  const limpar = async () => {
+    if (!contaSelecionada) return
+    setLimpando(true)
+    setErro(null)
+    const { error, count } = await supabase
+      .from('bank_transactions')
+      .delete({ count: 'exact' })
+      .eq('account_id', contaSelecionada)
+    setLimpando(false)
+    setConfirmarLimpar(false)
+    if (error) { setErro('Erro ao limpar transações: ' + error.message); return }
+    setMsg(`${count ?? 0} transação(ões) removida(s).`)
     carregarTransacoes()
   }
 
@@ -119,6 +155,17 @@ export default function Extrato() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) importar(f); e.target.value = '' }}
             />
           </label>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={abrirLimpar}
+              disabled={!contaSelecionada || transacoes.length === 0 || importando}
+              className="inline-flex items-center gap-2 bg-white border border-red-200 hover:bg-red-50 text-red-600 text-sm font-medium rounded-lg px-4 py-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 size={16} />
+              Limpar transações
+            </button>
+          )}
         </div>
         {contas.length === 0 && (
           <p className="text-sm text-slate-500 mt-3">
@@ -141,6 +188,32 @@ export default function Extrato() {
           />
         )}
       </Card>
+
+      <Modal titulo="Limpar transações" aberto={confirmarLimpar} onFechar={() => setConfirmarLimpar(false)}>
+        <p className="text-sm text-slate-600">
+          Isso vai apagar <strong>{qtdParaLimpar ?? 0}</strong> transação(ões) da conta{' '}
+          <strong>{contas.find((c) => c.id === contaSelecionada)?.name ?? '—'}</strong>. Esta ação não pode ser desfeita.
+        </p>
+        {conciliadasParaLimpar > 0 && (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+            ⚠️ {conciliadasParaLimpar} dessas transações estão conciliadas com lançamentos. Apagá-las desfaz a conciliação.
+          </p>
+        )}
+        <div className="flex justify-end gap-2 mt-6">
+          <button type="button" className={btnSecundario} onClick={() => setConfirmarLimpar(false)} disabled={limpando}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={limpar}
+            disabled={limpando}
+            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition disabled:opacity-50"
+          >
+            <Trash2 size={16} />
+            {limpando ? 'Limpando…' : 'Apagar tudo'}
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }
