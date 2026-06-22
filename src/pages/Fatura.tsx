@@ -201,14 +201,7 @@ export default function Fatura() {
     },
     {
       id: 'memo', header: 'Descrição', size: 380,
-      cell: (t) => (
-        <div className="flex items-center gap-1.5">
-          <span className="text-slate-700 font-medium">{t.memo}</span>
-          {t.kind === 'credit' && (
-            <span title="Crédito (estorno/desconto) — abate o total" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5 font-bold whitespace-nowrap">crédito</span>
-          )}
-        </div>
-      ),
+      cell: (t) => <span className="text-slate-700 font-medium">{t.memo}</span>,
     },
     {
       id: 'amount', header: 'Valor', size: 130, align: 'right',
@@ -216,6 +209,14 @@ export default function Fatura() {
         <span className={`font-semibold tabular-nums ${t.kind === 'credit' ? 'text-emerald-600' : 'text-slate-800'}`}>{fmt(valorComSinal(t))}</span>
       ),
       footer: <span className="font-bold text-slate-800">Total: {fmt(totalFiltered)}</span>,
+    },
+    {
+      id: 'tipo', header: 'Tipo', size: 100,
+      cell: (t) => (
+        <Badge cor={t.kind === 'credit' ? '#059669' : '#64748b'}>
+          {t.kind === 'credit' ? 'Crédito' : 'Débito'}
+        </Badge>
+      ),
     },
     {
       id: 'category', header: 'Categoria', size: 240,
