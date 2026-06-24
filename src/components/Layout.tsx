@@ -184,8 +184,8 @@ export default function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 ml-64">
-        <div className="max-w-[1400px] mx-auto px-6 py-6">
+      <main className="flex-1 min-w-0 ml-64">
+        <div className="max-w-[1760px] mx-auto px-6 py-6">
           <Suspense fallback={<div className="text-fg-subtle text-sm p-8">Carregando…</div>}>
             <Outlet />
           </Suspense>
