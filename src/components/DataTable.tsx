@@ -224,7 +224,7 @@ export default function DataTable<T>({ columns, data, tableKey, getRowId, empty,
             modifiers={[restrictToHorizontalAxis]}
             onDragEnd={handleDragEnd}
           >
-            <table className="table-fixed border-collapse text-sm tnum" style={fitsAll ? { width: '100%' } : { width: naturalTotal, minWidth: '100%' }}>
+            <table className="table-fixed border-collapse text-[13px] tnum" style={fitsAll ? { width: '100%' } : { width: naturalTotal, minWidth: '100%' }}>
               <thead>
                 {table.getHeaderGroups().map((hg) => (
                   <tr key={hg.id} className="border-b border-border">
