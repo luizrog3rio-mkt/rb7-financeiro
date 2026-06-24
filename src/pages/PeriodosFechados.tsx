@@ -48,13 +48,17 @@ export default function PeriodosFechados() {
   const atual = mesAtual()
 
   const carregar = useCallback(async () => {
-    if (!empresaAtiva) return
+    if (!empresaAtiva) {
+      setFechados([])
+      setCarregando(false)
+      return
+    }
     setCarregando(true)
     setErro(null)
     const { data, error } = await supabase
       .from('closed_periods')
       .select('*')
-      .eq('company_id', empresaAtiva)
+      .eq('company_id', empresaAtiva.id)
     if (error) {
       setErro(error.message)
     } else {
@@ -74,9 +78,9 @@ export default function PeriodosFechados() {
     setSalvando(true)
     setErro(null)
     const { error } = await supabase.from('closed_periods').insert({
-      company_id: empresaAtiva,
+      company_id: empresaAtiva.id,
       period,
-      closed_by: session.user.email ?? session.user.id,
+      closed_by: session.user.id,
     })
     setSalvando(false)
     if (error) {
@@ -105,6 +109,10 @@ export default function PeriodosFechados() {
       <PageHeader titulo="Períodos Fechados" subtitulo="Controle de competências encerradas para lançamentos" />
 
       {erro && <ErroBanner mensagem={erro} />}
+
+      {!empresaAtiva && !carregando && (
+        <p className="text-sm text-slate-500">Selecione uma empresa para gerenciar os períodos fechados.</p>
+      )}
 
       <Card>
         {carregando ? (
