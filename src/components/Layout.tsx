@@ -64,6 +64,7 @@ const grupos: Grupo[] = [
     titulo: 'DRE & Relatórios',
     itens: [
       { to: '/dre', rotulo: 'DRE', icone: Scale },
+      { to: '/dre-produto', rotulo: 'DRE por Produto', icone: Scale },
       { to: '/relatorio-categorias', rotulo: 'Relatório de Categorias', icone: PieChart },
       { to: '/conciliacao-dre', rotulo: 'Conciliação DRE', icone: ArrowLeftRight },
       { to: '/periodos-fechados', rotulo: 'Períodos Fechados', icone: Lock },
