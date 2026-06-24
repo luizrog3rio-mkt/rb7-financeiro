@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -172,7 +173,9 @@ export default function Layout() {
 
       <main className="flex-1 ml-64">
         <div className="max-w-[1400px] mx-auto px-6 py-6">
-          <Outlet />
+          <Suspense fallback={<div className="text-fg-subtle text-sm p-8">Carregando…</div>}>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
       <AtualizacaoModal />

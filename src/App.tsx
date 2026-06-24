@@ -1,28 +1,31 @@
-import { lazy, Suspense } from 'react'
+import { lazy } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AppProvider, useApp } from './contexts/AppContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
-import Contas from './pages/Contas'
-import Faturas from './pages/Faturas'
-import Fatura from './pages/Fatura'
-import Compras from './pages/Compras'
-import Lancamentos from './pages/Lancamentos'
-import Extrato from './pages/Extrato'
-import Hotmart from './pages/Hotmart'
-import Categorias from './pages/Categorias'
-import Empresas from './pages/Empresas'
-import Usuarios from './pages/Usuarios'
-import DRE from './pages/DRE'
-import Conciliacao from './pages/Conciliacao'
-import PlanoDeContas from './pages/PlanoDeContas'
-import DreProducts from './pages/DreProducts'
-import PeriodosFechados from './pages/PeriodosFechados'
-import ConciliacaoDRE from './pages/ConciliacaoDRE'
 
-// Dashboard e Relatório carregam o recharts (centenas de kB) — lazy tira do bundle inicial
+// Todas as páginas são lazy: cada rota vira um chunk próprio e sai do bundle
+// inicial (que fica só com framework + shell + Login). O Suspense que cobre as
+// rotas vive no Layout, em volta do <Outlet/>. xlsx é import() dinâmico (carrega
+// no export) e recharts cai nos chunks lazy de Dashboard/Relatório.
 const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Faturas = lazy(() => import('./pages/Faturas'))
+const Fatura = lazy(() => import('./pages/Fatura'))
+const Compras = lazy(() => import('./pages/Compras'))
+const Lancamentos = lazy(() => import('./pages/Lancamentos'))
+const Extrato = lazy(() => import('./pages/Extrato'))
+const Hotmart = lazy(() => import('./pages/Hotmart'))
+const Contas = lazy(() => import('./pages/Contas'))
 const RelatorioCategorias = lazy(() => import('./pages/RelatorioCategorias'))
+const DRE = lazy(() => import('./pages/DRE'))
+const Conciliacao = lazy(() => import('./pages/Conciliacao'))
+const Categorias = lazy(() => import('./pages/Categorias'))
+const Empresas = lazy(() => import('./pages/Empresas'))
+const Usuarios = lazy(() => import('./pages/Usuarios'))
+const PlanoDeContas = lazy(() => import('./pages/PlanoDeContas'))
+const DreProducts = lazy(() => import('./pages/DreProducts'))
+const PeriodosFechados = lazy(() => import('./pages/PeriodosFechados'))
+const ConciliacaoDRE = lazy(() => import('./pages/ConciliacaoDRE'))
 
 function Rotas() {
   const { session, carregando } = useApp()
@@ -40,14 +43,7 @@ function Rotas() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route
-          path="/"
-          element={
-            <Suspense fallback={<div className="text-fg-subtle text-sm p-8">Carregando…</div>}>
-              <Dashboard />
-            </Suspense>
-          }
-        />
+        <Route path="/" element={<Dashboard />} />
         <Route path="/faturas" element={<Faturas />} />
         <Route path="/faturas/:id" element={<Fatura />} />
         <Route path="/compras" element={<Compras />} />
@@ -57,14 +53,7 @@ function Rotas() {
         <Route path="/conciliacao" element={<Conciliacao />} />
         <Route path="/hotmart" element={<Hotmart />} />
         <Route path="/contas" element={<Contas />} />
-        <Route
-          path="/relatorio-categorias"
-          element={
-            <Suspense fallback={<div className="text-fg-subtle text-sm p-8">Carregando…</div>}>
-              <RelatorioCategorias />
-            </Suspense>
-          }
-        />
+        <Route path="/relatorio-categorias" element={<RelatorioCategorias />} />
         <Route path="/dre" element={<DRE />} />
         <Route path="/categorias" element={<Categorias />} />
         <Route path="/empresas" element={<Empresas />} />

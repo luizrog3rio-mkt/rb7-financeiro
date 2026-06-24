@@ -11,4 +11,25 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(versao),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // framework + supabase num chunk cacheável: mudam pouco, então um deploy
+        // novo (só código de app) não invalida o download deles no cliente.
+        // recharts/xlsx seguem nos próprios chunks (lazy / import dinâmico).
+        // Forma-função (o rolldown tipa manualChunks como função, não objeto).
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('@supabase')) return 'supabase'
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/react-router') ||
+            id.includes('/scheduler/')
+          )
+            return 'react-vendor'
+        },
+      },
+    },
+  },
 })
