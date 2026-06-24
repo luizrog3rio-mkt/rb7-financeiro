@@ -586,6 +586,18 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     carregar()
   }
 
+  // mover os selecionados para outra empresa (com confirm — reatribui os books)
+  const aplicarEmpresaEmMassa = async (companyId: string) => {
+    if (selectedIds.length === 0 || !companyId) return
+    const emp = empresas.find((e) => e.id === companyId)
+    const n = selectedIds.length
+    if (!window.confirm(`Mover ${n} ${n === 1 ? 'lançamento' : 'lançamentos'} para a empresa "${emp?.name ?? ''}"?`)) return
+    const { error } = await supabase.from('entries').update({ company_id: companyId }).in('id', selectedIds)
+    if (error) { setErro('Erro ao alterar a empresa em massa: ' + error.message); return }
+    setRowSelection({})
+    carregar()
+  }
+
   const colunas = useMemo<DataColumn<Entry>[]>(() => [
     { id: 'description', header: 'Descrição', size: 240, cell: (l) => (
       <div>
@@ -779,6 +791,19 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
               <option value="cancelled">Cancelado</option>
             </select>
           </div>
+          {empresas.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-fg-muted">Empresa:</span>
+              <select
+                value=""
+                onChange={(e) => { const v = e.target.value; if (v) aplicarEmpresaEmMassa(v) }}
+                className="rounded-control border border-border-strong px-2 py-1.5 text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                <option value="" disabled>Escolher…</option>
+                {empresas.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+              </select>
+            </div>
+          )}
           <button onClick={() => setRowSelection({})} className="ml-auto text-xs font-medium text-fg-muted hover:text-fg whitespace-nowrap">
             Limpar seleção
           </button>
