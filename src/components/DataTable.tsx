@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { SlidersHorizontal, FoldHorizontal, UnfoldHorizontal } from 'lucide-react'
+import { SlidersHorizontal } from 'lucide-react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -77,7 +77,6 @@ const alignClasse = (a?: string) =>
 
 export default function DataTable<T>({ columns, data, tableKey, getRowId, empty, enableSelection, rowSelection, onRowSelectionChange }: DataTableProps<T>) {
   const prefs = useColumnPrefs(tableKey)
-  const fit = prefs.fitWidth
   const colMap = useMemo(() => new Map(columns.map((c) => [c.id, c])), [columns])
 
   const columnDefs = useMemo<ColumnDef<T>[]>(
@@ -149,8 +148,9 @@ export default function DataTable<T>({ columns, data, tableKey, getRowId, empty,
   const flexNatural = flexCols.reduce((s, c) => s + c.getSize(), 0) || 1
   const naturalTotal = visibleCols.reduce((s, c) => s + c.getSize(), 0) + selW
   const avail = containerW - rigidTotal
-  // o fit "fecha" a largura só se sobra espaço pras colunas de texto no mínimo
-  const fitsAll = fit && containerW > 0 && flexCols.length > 0 && avail >= flexCols.length * FLEX_MIN
+  // o fit "fecha" a largura só se sobra espaço pras colunas de texto no mínimo;
+  // senão a tabela rola na horizontal (rede de segurança em telas estreitas).
+  const fitsAll = containerW > 0 && flexCols.length > 0 && avail >= flexCols.length * FLEX_MIN
 
   // distribui `avail` entre as colunas de texto respeitando o mínimo, somando
   // EXATO (os que batem no piso fixam; o resto reparte o que sobra) — assim não
@@ -168,7 +168,7 @@ export default function DataTable<T>({ columns, data, tableKey, getRowId, empty,
     fitsAll && flexW.has(col.id) ? flexW.get(col.id)! : col.getSize()
   const wcss = (n: number) => `${n}px`
   const truncCol = (id: string, size: number) => (fitsAll && ehFlex(id, size) ? 'truncate [&_p]:truncate' : '')
-  const padX = fit ? 'px-2' : 'px-4'
+  const padX = 'px-2'
 
   // ── scroll horizontal sem shift (rodinha vertical → horizontal) + sombra ──
   const [maisDireita, setMaisDireita] = useState(false)
@@ -188,7 +188,7 @@ export default function DataTable<T>({ columns, data, tableKey, getRowId, empty,
     el.addEventListener('wheel', onWheel, { passive: false })
     setMaisDireita(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
     return () => el.removeEventListener('wheel', onWheel)
-  }, [fit, fitsAll, containerW, data, prefs.columnVisibility, prefs.columnSizing])
+  }, [fitsAll, containerW, data, prefs.columnVisibility, prefs.columnSizing])
 
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e
@@ -204,16 +204,7 @@ export default function DataTable<T>({ columns, data, tableKey, getRowId, empty,
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-2">
-        <button
-          type="button"
-          onClick={() => prefs.setFitWidth(!fit)}
-          title={fit ? 'Ver as colunas em largura natural (rola na horizontal)' : 'Ajustar as colunas à largura da tela'}
-          className="inline-flex items-center gap-1.5 rounded-control border border-border px-2.5 py-1.5 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-2"
-        >
-          {fit ? <UnfoldHorizontal size={14} /> : <FoldHorizontal size={14} />}
-          {fit ? 'Largura natural' : 'Ajustar'}
-        </button>
+      <div className="flex justify-end mb-2">
         <ColunasMenu table={table} columns={columns} onReset={prefs.reset} />
       </div>
       <div className="relative">
