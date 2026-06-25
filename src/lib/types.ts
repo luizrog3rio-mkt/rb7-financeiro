@@ -7,7 +7,7 @@ export type EntryType = 'payable' | 'receivable'
 // (o valor 'overdue' continua no enum do banco por restrição do Postgres,
 //  mas não é mais usado no fluxo — entradas antigas foram migradas para 'to_pay')
 export type EntryStatus = 'to_pay' | 'pending' | 'paid' | 'cancelled' | 'refunded'
-export type AccountType = 'checking' | 'credit_card' | 'inter_company'
+export type AccountType = 'checking' | 'cash' | 'credit_card' | 'inter_company'
 
 // ── Tabelas novas (EN) ───────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Plus, Pencil, Landmark, CreditCard, ArrowLeftRight, Receipt } from 'lucide-react'
+import { Plus, Pencil, Landmark, Wallet, CreditCard, ArrowLeftRight, Receipt } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
 import { fmtBRL, fmtData, primeiroDiaMes, ultimoDiaMes } from '../lib/format'
@@ -20,12 +20,14 @@ const FONTE_LABEL: Record<ContaComSaldo['fonte'], { txt: string; tom: BadgeTom }
 
 const icones: Record<AccountType, typeof Landmark> = {
   checking: Landmark,
+  cash: Wallet,
   credit_card: CreditCard,
   inter_company: ArrowLeftRight,
 }
 
 const rotulos: Record<AccountType, string> = {
   checking: 'Conta corrente',
+  cash: 'Conta caixa',
   credit_card: 'Cartão de crédito',
   inter_company: 'Inter-empresas',
 }
@@ -165,6 +167,7 @@ export default function Contas() {
               <select className={inputCls} value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)}>
                 <option value="">Todos os tipos</option>
                 <option value="checking">Conta corrente</option>
+                <option value="cash">Conta caixa</option>
                 <option value="credit_card">Cartão de crédito</option>
                 <option value="inter_company">Inter-empresas</option>
               </select>
@@ -269,6 +272,7 @@ export default function Contas() {
               <label className="block text-sm font-medium mb-1">Tipo</label>
               <select className={inputCls} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as AccountType })}>
                 <option value="checking">Conta corrente</option>
+                <option value="cash">Conta caixa</option>
                 <option value="credit_card">Cartão de crédito</option>
                 <option value="inter_company">Inter-empresas</option>
               </select>
