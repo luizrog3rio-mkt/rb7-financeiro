@@ -408,6 +408,7 @@ existem.
 
 | Version | Nome | O que faz |
 |---|---|---|
+| `20260625163650` | remove_categorias | **Remoção TOTAL do conceito de categoria** (decisão do Luiz, 2026-06-25). A classificação financeira passa a ser só Plano de Contas (`chart_of_accounts`) + Produto DRE (`dre_products`). Dropa: RPCs órfãs `relatorio_categorias` e `dre_competencia` (a DRE viva é `dre_by_competency`, nature-based); colunas `entries.category_id`, `bank_transactions.category_id`/`auto_categorized`, `transactions.category`/`auto_categorized`, `purchase_items.category`; tabelas `categories`/`purchase_item_categories`/`auto_rules`. **IRREVERSÍVEL** — apagou 915 categorizações de cartão, 76 lançamentos, 10 compras, 62 auto-regras, dicionários (13+8). Frontend limpo nas Fases 1/2 (telas Categorias e Relatório de Categorias removidas, auto-categorização aposentada, `useFaturaWorld`/`TagSelector` apagados, FaturaDashboard slim). Verificado pós-apply: 0 colunas/tabelas/RPCs de categoria. |
 | `20260610194751` | hotmart_totals_rpc | RPC de agregação dos KPIs Hotmart (PostgREST limita resposta a 1000 linhas — somas vão pro banco). SECURITY INVOKER, search_path='', GRANT explícito a authenticated. |
 | `20260610202455` | enable_cron_net | Habilita pg_cron + pg_net pro auto-sync diário da Hotmart. |
 | `20260610203722` | hotmart_cron_daily | Job `hotmart-sync-diario` (09:00 UTC): chama a Edge Function `hotmart-sync` via `net.http_post` em modo-serviço, lendo o segredo do **Vault** (`hotmart_service_key`); janela 1 mês, timeout 60s, idempotente. |

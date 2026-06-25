@@ -11,10 +11,10 @@ MESMO banco de produção.**
 A unificação com o rb7-financeiro (aposentado e deletado) foi **concluída**:
 app TypeScript (React 19 + Tailwind 4 + react-router 7 + Vite/rolldown)
 substituiu o App.jsx monolítico. Telas: Dashboard (híbrido cartão+financeiro),
-Faturas de Cartão (import OFX + auto-categorização + export CSV/XLSX),
+Faturas de Cartão (import OFX + export CSV/XLSX),
 Compras (anotações pendentes por mês), Contas a Pagar/Receber (`entries`),
 Extratos OFX (`bank_transactions`), Hotmart (sync via API + cron diário),
-Contas & Cartões (`accounts`), Categorias (gestão com rename-cascade).
+Contas & Cartões (`accounts`).
 
 Fonte da verdade do schema: banco vivo + `supabase/migrations/` (baseline
 registrado sem execução + migrations aplicadas; status de cada uma no
@@ -38,9 +38,12 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   **descartada**: cartão (`invoices`/`transactions`) e extrato bancário
   (`bank_transactions`, com `UNIQUE(account_id, fit_id)`) são fluxos separados
   por design.
-- **Categoria é TEXTO por nome** em transactions/purchase_items/auto_rules
-  (sem FK) — auditado na Fase 3 e mantido (dado íntegro; a tela Categorias faz
-  cascade no rename). `transactions.date` é texto 'DD/MM/YYYY'; `amount` é
+- **Categoria foi REMOVIDA do app** (2026-06-25, migration `remove_categorias`):
+  a classificação financeira é só Plano de Contas (`chart_of_accounts`) +
+  Produto DRE (`dre_products`). Sumiram as tabelas `categories`/`auto_rules`/
+  `purchase_item_categories`, as colunas `*.category`/`category_id`/
+  `auto_categorized`, a auto-categorização do cartão e as telas Categorias e
+  Relatório de Categorias. `transactions.date` é texto 'DD/MM/YYYY'; `amount` é
   sempre positivo (magnitude) e `transactions.kind` ('debit'/'credit') dá o
   sinal contábil: débito = despesa (soma), crédito = estorno/desconto (abate).
   O parser de cartão (`lib/fatura.ts`) classifica pelo TRNTYPE do OFX e
@@ -109,8 +112,7 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   cru — usar os tokens.** Primitivos novos em `src/components/ui.tsx`: `KPICard`/
   `KPIStrip` (faixa de KPIs), `Button` (primary/secondary/danger/ghost), `Alert`
   (info/success/warning/danger), `Badge`/`StatusBadge` por `tom` semântico — o
-  `Badge cor={hex}` legado segue **só** p/ identidade de categoria/natureza
-  (preservar). `btnPrimario`/`btnSecundario` viraram alias-string tokenizados.
+  `Badge cor={hex}` legado segue **só** p/ identidade de natureza (preservar). `btnPrimario`/`btnSecundario` viraram alias-string tokenizados.
   Sidebar (`Layout.tsx`) clara, 7 grupos por domínio. **Gotcha Tailwind 4:** um
   `*/` dentro de comentário no `index.css` fecha o comentário cedo e derruba o
   `@theme` inteiro (silencioso, sem erro óbvio) — nunca escrever `bg-*/text-*`
@@ -119,11 +121,12 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `sb_publishable_`/`sb_secret_`; as JWT legadas estão **desabilitadas** — não
   reativar). `.env.example` na raiz.
 - `npm run dev` → localhost:5173 · `npm run build` (tsc strict + vite) ·
-  `npm run lint` (0 errors; os 23 warnings conscientes = 21 fetch-on-mount + 2 da
+  `npm run lint` (0 errors; os 22 warnings conscientes = 20 fetch-on-mount + 2 da
   DataTable: o load-on-mount do useColumnPrefs e o react-compiler "incompatible
   library" das libs de tabela — ver eslint.config.js). Cada página nova com o
-  padrão `useEffect(() => { carregar() }, [carregar])` soma 1 fetch-on-mount (as
-  4 telas novas da DRE levaram o total de 17→21).
+  padrão `useEffect(() => { carregar() }, [carregar])` soma 1 fetch-on-mount; a
+  remoção de categoria (telas Categorias/Relatório + hook useFaturaWorld)
+  derrubou 3 do total em 2026-06-25.
 - `xlsx` vem do tarball oficial do SheetJS (cdn.sheetjs.com) — o pacote do npm
   está abandonado com CVE; não trocar de volta.
 - PowerShell 5.1: mensagem de `git commit` via here-string `@'...'@` **não
@@ -132,10 +135,11 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   no design system** (Tailwind + `ui.tsx` + `DataTable` + `Modal`; estilos inline
   e o `estilos.ts`/objeto `S` foram removidos — 2026-06-19). Os 15 contratos de
   `docs/fase2/contratos-app-antigo.md` são preservados no **comportamento/dados**
-  (parser OFX, `fit_id` não-dedupe, categoria-string, fluxo de pendentes, export
-  filtrados-vs-todos, drill-down, texto exato do confirm de excluir fatura,
-  reimport duplica); a **fidelidade visual 1:1 deixou de ser regra** — o visual
-  agora segue o resto do app.
+  (parser OFX, `fit_id` não-dedupe, fluxo de pendentes, export filtrados-vs-todos,
+  texto exato do confirm de excluir fatura, reimport duplica); os contratos de
+  categoria (#4 auto-categorização, #9 coluna Categoria no export, #13 filtro por
+  categoria) foram **aposentados** com a remoção de categoria (2026-06-25). A
+  **fidelidade visual 1:1 deixou de ser regra** — o visual segue o resto do app.
 - **Tabelas reordenáveis/redimensionáveis/ocultáveis**: `src/components/DataTable.tsx`
   (TanStack Table v8 headless + @dnd-kit pro arrastar do header) + hook
   `src/hooks/useColumnPrefs.ts` (cacheia em localStorage, persiste em
