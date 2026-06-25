@@ -48,6 +48,14 @@ interface FormState {
 // custo variável); estrutura (despesa fixa/financeiro/depreciação/imposto) não.
 const rateioPadrao = (n: Nature) => n === 'revenue' || n === 'deduction' || n === 'variable_cost'
 
+// A "Ordem" (sort_order) deriva direto do código: cada nível ocupa 3 dígitos
+// (1.2.01 -> 1*1_000_000 + 2*1_000 + 1 = 1_002_001). Mesma fórmula da migration
+// plano_contas_v2, então a ordenação da tabela espelha a hierarquia do código.
+const ordemDoCodigo = (code: string): number => {
+  const [a = 0, b = 0, c = 0] = code.split('.').map((s) => parseInt(s, 10) || 0)
+  return a * 1_000_000 + b * 1_000 + c
+}
+
 const FORM_VAZIO: FormState = {
   code: '',
   name: '',
@@ -288,7 +296,7 @@ export default function PlanoDeContas() {
                 autoFocus
                 className={inputCls}
                 value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value })}
+                onChange={(e) => setForm({ ...form, code: e.target.value, sort_order: String(ordemDoCodigo(e.target.value)) })}
                 placeholder="ex: 3.1.01"
               />
             </div>
@@ -296,11 +304,13 @@ export default function PlanoDeContas() {
               <label className="block text-sm font-medium mb-1">Ordem</label>
               <input
                 type="number"
-                min={0}
-                className={inputCls}
+                readOnly
+                tabIndex={-1}
+                className={inputCls + ' opacity-60 cursor-not-allowed'}
                 value={form.sort_order}
-                onChange={(e) => setForm({ ...form, sort_order: e.target.value })}
+                title="Calculada automaticamente a partir do código"
               />
+              <p className="text-xs text-fg-subtle mt-1">Calculada do código — não precisa preencher.</p>
             </div>
           </div>
 
