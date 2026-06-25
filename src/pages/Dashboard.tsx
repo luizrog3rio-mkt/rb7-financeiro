@@ -142,6 +142,7 @@ export default function Dashboard() {
   const fluxoMensal: MesAgg[] = useMemo(() => {
     const m = new Map<string, MesAgg>()
     for (const l of lancamentos) {
+      if (l.transfer_id) continue // transferências são neutras — fora do fluxo
       const mes = l.due_date.slice(0, 7)
       if (!m.has(mes)) m.set(mes, { mes, receber: 0, pagar: 0 })
       const agg = m.get(mes)!

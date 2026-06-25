@@ -91,6 +91,7 @@ export interface Entry {
   parent_entry_id?: string | null
   appropriation_month?: number | null
   appropriation_total_months?: number | null
+  transfer_id?: string | null // par de lançamentos de uma transferência entre contas
   // embeds opcionais (select com join)
   account?: Account | null
   chart_of_account?: ChartOfAccount | null

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Plus, Pencil, CheckCircle2, Trash2, ArrowRight, Repeat, Upload, Search } from 'lucide-react'
+import { Plus, Pencil, CheckCircle2, Trash2, ArrowRight, ArrowLeftRight, Repeat, Upload, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
 import { fmtBRL, fmtData, hoje } from '../lib/format'
 import type { Account, Entry, EntryType, EntryStatus } from '../lib/types'
 import type { ChartOfAccount, DreProduct } from '../lib/types'
-import { Card, PageHeader, StatusBadge, Vazio, Modal, ErroBanner, KPICard, KPIStrip, inputCls, btnPrimario, btnSecundario } from '../components/ui'
+import { Card, PageHeader, StatusBadge, Badge, Vazio, Modal, ErroBanner, KPICard, KPIStrip, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 import DataTable, { type DataColumn } from '../components/DataTable'
 import type { RowSelectionState } from '@tanstack/react-table'
 import DateRangePicker from '../components/DateRangePicker'
@@ -171,6 +171,11 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   const [importErro, setImportErro] = useState<string | null>(null)
   const [importando, setImportando] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // transferência entre contas
+  const [transferAberto, setTransferAberto] = useState(false)
+  const [transferForm, setTransferForm] = useState({ origem: '', destino: '', amount: '', date: hoje(), description: '' })
+  const [transferindo, setTransferindo] = useState(false)
 
   const carregar = useCallback(async () => {
     setErro(null)
@@ -367,11 +372,55 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   }, [carregar, inserirProximoMes])
 
   const excluir = useCallback(async (l: Entry) => {
-    if (!window.confirm(`Excluir "${l.description}"?`)) return
-    const { error } = await supabase.from('entries').delete().eq('id', l.id)
+    const ehTransfer = !!l.transfer_id
+    const msg = ehTransfer
+      ? 'Excluir esta transferência? As duas pernas (saída e entrada) serão removidas.'
+      : `Excluir "${l.description}"?`
+    if (!window.confirm(msg)) return
+    const { error } = ehTransfer
+      ? await supabase.from('entries').delete().eq('transfer_id', l.transfer_id!)
+      : await supabase.from('entries').delete().eq('id', l.id)
     if (error) { setErro('Erro ao excluir lançamento: ' + error.message); return }
     carregar()
   }, [carregar])
+
+  // Transferência entre contas: cria DOIS lançamentos pagos amarrados por um
+  // transfer_id — saída (payable) na origem + entrada (receivable) no destino,
+  // ambos SEM conta DRE (neutros no resultado). Cada perna fica na empresa da
+  // sua própria conta (suporta transferência entre empresas).
+  const salvarTransferencia = async () => {
+    setErro(null)
+    const origem = contas.find((c) => c.id === transferForm.origem)
+    const destino = contas.find((c) => c.id === transferForm.destino)
+    const valor = parseFloat(transferForm.amount.replace(',', '.'))
+    if (!origem || !destino) { setErro('Escolha as contas de origem e destino.'); return }
+    if (origem.id === destino.id) { setErro('Origem e destino devem ser contas diferentes.'); return }
+    if (!valor || valor <= 0) { setErro('Informe um valor maior que zero.'); return }
+    if (!transferForm.date) { setErro('Informe a data da transferência.'); return }
+    setTransferindo(true)
+    const transferId = crypto.randomUUID()
+    const desc = transferForm.description.trim() || `Transferência: ${origem.name} → ${destino.name}`
+    const base = {
+      amount: valor,
+      due_date: transferForm.date,
+      competency_date: transferForm.date,
+      payment_date: transferForm.date,
+      status: 'paid' as EntryStatus,
+      chart_of_account_id: null,
+      transfer_id: transferId,
+      description: desc,
+      created_by: session?.user.id ?? null,
+    }
+    const { error } = await supabase.from('entries').insert([
+      { ...base, company_id: origem.company_id, account_id: origem.id, type: 'payable' as EntryType },
+      { ...base, company_id: destino.company_id, account_id: destino.id, type: 'receivable' as EntryType },
+    ])
+    setTransferindo(false)
+    if (error) { setErro('Erro ao registrar a transferência: ' + error.message); return }
+    setTransferAberto(false)
+    setTransferForm({ origem: '', destino: '', amount: '', date: hoje(), description: '' })
+    carregar()
+  }
 
   const processarArquivo = async (file: File) => {
     setImportErro(null)
@@ -482,10 +531,10 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   }, [lancamentos, busca])
 
   const totais = useMemo(() => ({
-    aPagar: lancamentosExibidos.filter((l) => l.status === 'to_pay').reduce((s, l) => s + Number(l.amount), 0),
-    pendente: lancamentosExibidos.filter((l) => l.status === 'pending').reduce((s, l) => s + Number(l.amount), 0),
-    // "Pago/Recebido" = caixa que de fato moveu (com juros/multa/desconto)
-    pago: lancamentosExibidos.filter((l) => l.status === 'paid').reduce((s, l) => s + valorPago(l), 0),
+    aPagar: lancamentosExibidos.filter((l) => l.status === 'to_pay' && !l.transfer_id).reduce((s, l) => s + Number(l.amount), 0),
+    pendente: lancamentosExibidos.filter((l) => l.status === 'pending' && !l.transfer_id).reduce((s, l) => s + Number(l.amount), 0),
+    // "Pago/Recebido" = caixa que de fato moveu (transferências não entram aqui)
+    pago: lancamentosExibidos.filter((l) => l.status === 'paid' && !l.transfer_id).reduce((s, l) => s + valorPago(l), 0),
   }), [lancamentosExibidos])
 
   // total da coluna Valor (rodapé da tabela): exclui cancelados (anulados não
@@ -493,7 +542,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   // concilia com os cards (A pagar + Pendente + Pago)
   const totalValor = useMemo(
     () => lancamentosExibidos
-      .filter((l) => filtroStatus === 'cancelled' || l.status !== 'cancelled')
+      .filter((l) => (filtroStatus === 'cancelled' || l.status !== 'cancelled') && !l.transfer_id)
       .reduce((s, l) => s + Number(l.amount), 0),
     [lancamentosExibidos, filtroStatus]
   )
@@ -622,7 +671,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         ? <span className="text-fg-muted tnum">{fmtBRL(Number(l.discount_amount))}</span>
         : <span className="text-fg-subtle">—</span>
     },
-    { id: 'status', header: 'Status', size: 104, align: 'right', cell: (l) => <StatusBadge status={l.status} tipo={tipo} /> },
+    { id: 'status', header: 'Status', size: 104, align: 'right', cell: (l) => l.transfer_id ? <Badge tom="brand">Transferência</Badge> : <StatusBadge status={l.status} tipo={tipo} /> },
     { id: 'acoes', header: '', label: 'Ações', size: 96, align: 'right', enableHiding: false, cell: (l) => (
       <div className="flex gap-2 justify-end">
         {isAdmin && l.status === 'to_pay' && (
@@ -657,6 +706,9 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         acao={
           isAdmin ? (
             <div className="flex gap-2">
+              <button onClick={() => setTransferAberto(true)} className={btnSecundario}>
+                <ArrowLeftRight size={16} /> Transferência
+              </button>
               <button onClick={() => setImportAberto(true)} className={btnSecundario}>
                 <Upload size={16} /> Importar
               </button>
@@ -900,6 +952,53 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
             {salvando ? 'Salvando…' : 'Salvar'}
           </button>
         </form>
+      </Modal>
+
+      {/* Modal: transferência entre contas */}
+      <Modal titulo="Transferência entre contas" aberto={transferAberto} onFechar={() => setTransferAberto(false)}>
+        <div className="space-y-4">
+          <p className="text-xs text-fg-subtle">
+            Move dinheiro de uma conta pra outra: cria uma <strong>saída</strong> na origem e uma <strong>entrada</strong> no destino. Não entra na DRE — transferência é neutra no resultado.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Conta de origem *</label>
+              <select className={inputCls} value={transferForm.origem} onChange={(e) => setTransferForm({ ...transferForm, origem: e.target.value })}>
+                <option value="">Selecione…</option>
+                {contas.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{empresas.length > 1 ? ` — ${empresas.find((e) => e.id === c.company_id)?.name ?? ''}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Conta de destino *</label>
+              <select className={inputCls} value={transferForm.destino} onChange={(e) => setTransferForm({ ...transferForm, destino: e.target.value })}>
+                <option value="">Selecione…</option>
+                {contas.filter((c) => c.id !== transferForm.origem).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{empresas.length > 1 ? ` — ${empresas.find((e) => e.id === c.company_id)?.name ?? ''}` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Valor (R$) *</label>
+              <input inputMode="decimal" className={inputCls} value={transferForm.amount} onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })} placeholder="0,00" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Data *</label>
+              <input type="date" className={inputCls} value={transferForm.date} onChange={(e) => setTransferForm({ ...transferForm, date: e.target.value })} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium mb-1">Descrição</label>
+              <input className={inputCls} value={transferForm.description} onChange={(e) => setTransferForm({ ...transferForm, description: e.target.value })} placeholder="Opcional — ex.: Aporte no caixa" />
+            </div>
+          </div>
+          {contas.length < 2 && (
+            <p className="text-xs text-warning">Você precisa de pelo menos 2 contas cadastradas em Contas &amp; Cartões.</p>
+          )}
+          <button onClick={salvarTransferencia} disabled={transferindo || contas.length < 2} className={btnPrimario + ' w-full justify-center'}>
+            {transferindo ? 'Registrando…' : 'Registrar transferência'}
+          </button>
+        </div>
       </Modal>
 
       {/* Modal: importar planilha */}
