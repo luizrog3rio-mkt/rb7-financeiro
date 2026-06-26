@@ -15,8 +15,8 @@
 // Modos:
 //  - POST {company_id, months?}            → usuário (JWT): upsert respeitando RLS
 //  - POST {company_id, debug:true}         → 1ª venda crua+mapeada, NÃO grava
-//  - POST {company_id, refresh_sck:N}      → SÓ serviço: backfill do sck (tracking
-//    .source_sck) nas vendas antigas, UPDATE não-destrutivo (só sck + sck_checked_at)
+//  - POST {company_id, refresh_sck:N}      → SÓ serviço: backfill do tracking
+//    (sck=source_sck, src=source, external_code) nas vendas antigas, UPDATE não-destrutivo
 //  - POST {company_id, refresh_status:N}   → SÓ serviço: re-checa N vendas por
 //    ?transaction=<id> e atualiza estornos (a busca por data não traz reembolso)
 //  - POST {company_id, refresh_commissions:N} → SÓ serviço: preenche afiliado/
@@ -86,6 +86,8 @@ function mapSale(it: any, companyId: string) {
     status: String(p.status ?? 'UNKNOWN'),
     buyer: it?.buyer?.name ?? null,
     sck: it?.purchase?.tracking?.source_sck ?? null, // tracking do checkout (vendedor direto/visitor-id/UTM)
+    src: it?.purchase?.tracking?.source ?? null, // origem/campanha (NÃO carrega vendedor)
+    external_code: it?.purchase?.tracking?.external_code ?? null, // código de campanha (ex.: FB)
     company_id: companyId,
   }
 }
@@ -122,12 +124,13 @@ Deno.serve(async (req) => {
     const accessToken = tokenJson.access_token
     if (!accessToken) return json({ error: 'token Hotmart sem access_token', body: tokenJson }, 502)
 
-    // 1a-ter) modo refresh_sck (SÓ serviço): backfill do sck nas vendas EXISTENTES.
-    //   A API /sales/history traz purchase.tracking.source_sck — que vira o sck da
-    //   venda (vendedor direto, ou ruído visitor-id/UTM). Re-busca por
-    //   ?transaction=<id> e faz UPDATE não-destrutivo (só sck quando existe, sempre
-    //   sck_checked_at). Rodízio por sck_checked_at IS NULL. Vendas NOVAS já recebem
-    //   sck pelo mapSale do sync diário — este modo é só pro histórico.
+    // 1a-ter) modo refresh_sck (SÓ serviço): backfill do TRACKING nas vendas
+    //   EXISTENTES. A API /sales/history traz purchase.tracking = { source_sck (=sck
+    //   do vendedor/visitor-id/UTM), source (=src, origem/campanha), external_code }.
+    //   Re-busca por ?transaction=<id> e faz UPDATE não-destrutivo (cada campo só
+    //   quando existe, sempre sck_checked_at). Rodízio por sck_checked_at IS NULL.
+    //   Vendas NOVAS já recebem tudo pelo mapSale do sync diário — este modo é só
+    //   pro histórico. (sck/src/external_code vêm do MESMO tracking, num passe só.)
     if (refresh_sck) {
       if (!isService) return json({ error: 'refresh_sck é só modo-serviço' }, 403)
       const N = Math.max(1, Math.min(500, Number(refresh_sck) || 200))
@@ -150,10 +153,12 @@ Deno.serve(async (req) => {
         u.searchParams.set('transaction', c.transaction_code)
         const r = await fetch(u.toString(), { headers: { Authorization: `Bearer ${accessToken}` } })
         if (!r.ok) continue
-        const it = (await r.json())?.items?.[0]
-        const ss = it?.purchase?.tracking?.source_sck
+        const tr = (await r.json())?.items?.[0]?.purchase?.tracking ?? {}
+        const ss = tr.source_sck
         const patch: Record<string, unknown> = { sck_checked_at: agora }
         if (ss != null && String(ss).trim() !== '') { patch.sck = String(ss).trim(); comSck++ }
+        if (tr.source != null && String(tr.source).trim() !== '') patch.src = String(tr.source).trim()
+        if (tr.external_code != null && String(tr.external_code).trim() !== '') patch.external_code = String(tr.external_code).trim()
         await sbsvc.from('hotmart_sales').update(patch).eq('transaction_code', c.transaction_code)
         verificados++
       }

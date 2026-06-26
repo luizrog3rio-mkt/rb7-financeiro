@@ -40,8 +40,13 @@ function StatusHotmart({ status }: { status: string }) {
 
 // Linha do "Total por afiliado" (RPC hotmart_by_affiliate, agregação no banco)
 type AfiliadoRow = { afiliado: string; qtd: number; comissao: number; bruto: number; total: number; liquido_produtor: number }
-// Linha do "Total por vendedor" (RPC hotmart_by_seller, atribuição por sck)
-type VendedorRow = { vendedor: string; qtd: number; bruto: number; total: number; liquido: number }
+// Linha do "Total por pessoa" (RPC hotmart_by_person): vendas pelos 2 canais —
+// sck (vendedor direto) e afiliado — lado a lado, sem dupla contagem
+type PessoaRow = {
+  vendedor: string
+  vendas_sck: number; liquido_sck: number
+  vendas_afiliado: number; comissao_afiliado: number; liquido_afiliado: number
+}
 
 export default function Hotmart() {
   const { empresas, empresaAtiva, isAdmin } = useApp()
@@ -55,7 +60,7 @@ export default function Hotmart() {
   const [dataAte, setDataAte] = useState('')
   const [totais, setTotais] = useState({ qtd: 0, total: 0, bruto: 0, taxas: 0, afiliados: 0, liquido: 0, foraMoeda: 0 })
   const [afiliados, setAfiliados] = useState<AfiliadoRow[]>([])
-  const [vendedores, setVendedores] = useState<VendedorRow[]>([])
+  const [pessoas, setPessoas] = useState<PessoaRow[]>([])
 
   useEffect(() => {
     if (empresas.length && !empresaDestino) setEmpresaDestino(empresaAtiva?.id ?? empresas[0].id)
@@ -98,16 +103,17 @@ export default function Hotmart() {
       bruto: Number(a.bruto), total: Number(a.total), liquido_produtor: Number(a.liquido_produtor),
     })))
 
-    // Total por vendedor (atribuição por sck; vazio até mapear sck → vendedor em /vendedores)
-    const { data: vend, error: e4 } = await supabase.rpc('hotmart_by_seller', {
+    // Total por pessoa (sck + afiliado; vazio até mapear em /vendedores)
+    const { data: pes, error: e4 } = await supabase.rpc('hotmart_by_person', {
       p_company: empresaAtiva?.id ?? null,
       p_start: pStart,
       p_end: pEnd,
     })
-    if (e4) { setErro('Erro nos vendedores: ' + e4.message); return }
-    setVendedores(((vend as VendedorRow[]) ?? []).map((v) => ({
-      vendedor: v.vendedor, qtd: Number(v.qtd),
-      bruto: Number(v.bruto), total: Number(v.total), liquido: Number(v.liquido),
+    if (e4) { setErro('Erro por pessoa: ' + e4.message); return }
+    setPessoas(((pes as PessoaRow[]) ?? []).map((v) => ({
+      vendedor: v.vendedor,
+      vendas_sck: Number(v.vendas_sck), liquido_sck: Number(v.liquido_sck),
+      vendas_afiliado: Number(v.vendas_afiliado), comissao_afiliado: Number(v.comissao_afiliado), liquido_afiliado: Number(v.liquido_afiliado),
     })))
   }, [empresaAtiva, dataDe, dataAte])
 
@@ -304,36 +310,44 @@ export default function Hotmart() {
 
       <Card className="mt-6">
         <div className="px-5 pt-5 pb-3 border-b border-border">
-          <h2 className="text-sm font-semibold text-fg">Total por vendedor</h2>
+          <h2 className="text-sm font-semibold text-fg">Total por pessoa</h2>
           <p className="text-xs text-fg-subtle mt-0.5">
-            Vendas atribuídas a vendedores diretos pelo sck do checkout (período selecionado · moeda BRL). Mapeie os sck em <span className="text-fg-muted">Vendedores</span>.
+            Vendas atribuídas a cada pessoa pelos dois canais — <span className="text-fg-muted">sck</span> (vendedor direto) e <span className="text-fg-muted">afiliado</span> — lado a lado (período · BRL). Mapeie em <span className="text-fg-muted">Vendedores</span>.
           </p>
         </div>
-        {vendedores.length === 0 ? (
-          <Vazio mensagem="Nenhuma venda atribuída a vendedor. Cadastre vendedores e mapeie os códigos de sck na tela Vendedores." />
+        {pessoas.length === 0 ? (
+          <Vazio mensagem="Nenhuma venda atribuída. Cadastre vendedores e mapeie os sck / afiliados na tela Vendedores." />
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-fg-subtle border-b border-border">
-                <th className="font-medium px-5 py-2">Vendedor</th>
-                <th className="font-medium px-3 py-2 text-right">Vendas</th>
-                <th className="font-medium px-3 py-2 text-right">Bruto</th>
-                <th className="font-medium px-3 py-2 text-right">Valor Total</th>
-                <th className="font-medium px-5 py-2 text-right">Líquido RB7</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendedores.map((v) => (
-                <tr key={v.vendedor} className="border-b border-border last:border-0">
-                  <td className="px-5 py-2 text-fg">{v.vendedor}</td>
-                  <td className="px-3 py-2 text-right tnum text-fg-muted">{v.qtd}</td>
-                  <td className="px-3 py-2 text-right tnum text-fg-muted">{fmtBRL(v.bruto)}</td>
-                  <td className="px-3 py-2 text-right tnum text-fg-muted">{fmtBRL(v.total)}</td>
-                  <td className="px-5 py-2 text-right tnum font-medium text-revenue">{fmtBRL(v.liquido)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-fg-subtle border-b border-border">
+                  <th className="font-medium px-5 py-2" rowSpan={2}>Pessoa</th>
+                  <th className="font-medium px-3 py-1.5 text-center border-l border-border" colSpan={2}>Direto (sck)</th>
+                  <th className="font-medium px-3 py-1.5 text-center border-l border-border" colSpan={3}>Afiliado</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                <tr className="text-left text-fg-subtle border-b border-border text-xs">
+                  <th className="font-medium px-3 py-1.5 text-right border-l border-border">Vendas</th>
+                  <th className="font-medium px-3 py-1.5 text-right">Líquido</th>
+                  <th className="font-medium px-3 py-1.5 text-right border-l border-border">Vendas</th>
+                  <th className="font-medium px-3 py-1.5 text-right">Comissão</th>
+                  <th className="font-medium px-5 py-1.5 text-right">Líquido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pessoas.map((v) => (
+                  <tr key={v.vendedor} className="border-b border-border last:border-0">
+                    <td className="px-5 py-2 text-fg">{v.vendedor}</td>
+                    <td className="px-3 py-2 text-right tnum text-fg-muted border-l border-border">{v.vendas_sck || '—'}</td>
+                    <td className="px-3 py-2 text-right tnum font-medium text-revenue">{v.vendas_sck ? fmtBRL(v.liquido_sck) : '—'}</td>
+                    <td className="px-3 py-2 text-right tnum text-fg-muted border-l border-border">{v.vendas_afiliado || '—'}</td>
+                    <td className="px-3 py-2 text-right tnum text-warning">{v.vendas_afiliado ? fmtBRL(v.comissao_afiliado) : '—'}</td>
+                    <td className="px-5 py-2 text-right tnum font-medium text-revenue">{v.vendas_afiliado ? fmtBRL(v.liquido_afiliado) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
     </div>

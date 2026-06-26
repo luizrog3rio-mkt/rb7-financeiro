@@ -91,13 +91,25 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `hotmart_sales.sck`. Valor é ruidoso: visitor-id (`<ts>_<id>`) / UTM (`a|b|c`)
   **ou** código fixo de vendedor (`raphaella_silva`, `maikom_vinicius`,
   `luiz_otavio`…, com variantes de grafia). Tabelas `sellers` (cadastro) +
-  `hotmart_sck_map` (de-para sck→vendedor, espelha `hotmart_product_map`). RPCs
-  `hotmart_scks` (de-para, com `is_ruido`) e `hotmart_by_seller` (relatório). Tela
-  **`/vendedores`** cadastra vendedor e mapeia o sck; seção "Total por vendedor"
-  na tela Hotmart. Backfill do sck por `refresh_sck` (cron temporário
+  `hotmart_sck_map` (de-para sck→vendedor, espelha `hotmart_product_map`). RPC
+  `hotmart_scks` (de-para, com `is_ruido`). Tela **`/vendedores`** cadastra
+  vendedor e mapeia o sck. Backfill do sck por `refresh_sck` (cron temporário
   auto-terminável); vendas novas pegam sck pelo sync diário (sem cron permanente).
-  Os mesmos nomes aparecem como AFILIADO e como VENDEDOR (a pessoa vende ora pelo
-  link de afiliado, ora por sck) — lentes separadas, sem conflito.
+- **Afiliado UNIFICADO na mesma pessoa (vendedor)**: a pessoa vende ora pelo
+  link de afiliado, ora por sck — são a MESMA pessoa. Por isso `hotmart_affiliate_map`
+  (nome do afiliado → `sellers`, espelha o sck_map) liga o afiliado ao mesmo
+  cadastro de vendedor. ⚠️ A grafia diverge entre canais (afiliado "Raphaela Silva"
+  vs sck "raphaella_silva") — mapear os dois pro mesmo vendedor resolve. RPCs
+  `hotmart_affiliates` (de-para, o nome do afiliado é canônico, sem `is_ruido`) e
+  **`hotmart_by_person`** (Total por PESSOA: sck e afiliado lado a lado, colunas
+  separadas, sem dupla contagem) — substitui o `hotmart_by_seller` na tela (que
+  segue existindo, só-sck). 2 seções de de-para em `/vendedores` + "Total por
+  pessoa" na Hotmart.
+- **Tracking extra `src`/`external_code`**: `mapSale` grava `hotmart_sales.src`
+  (=`tracking.source`) e `external_code` (=`tracking.external_code`) — origem/
+  campanha, **NÃO carregam vendedor** (só o `sck` carrega; `xcode` a API não
+  traz, é webhook-only). `refresh_sck` preenche os 3 (sck+src+external_code) do
+  MESMO tracking num passe só.
 - **Mapeamento de valores validado contra dados reais (2026-06-11), ver
   [[hotmart-mapeamento-campos]]**: `total_amount`=`purchase.price.value`
   (VALOR TOTAL pago, **inclui juros de parcelamento**); `gross_amount`=

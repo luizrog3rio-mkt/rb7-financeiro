@@ -18,8 +18,18 @@ interface SckRow {
   is_ruido: boolean
 }
 
+// Afiliado (nome canônico da Hotmart) → mesmo vendedor (pessoa) do sck
+interface AfiRow {
+  affiliate: string
+  vendas: number
+  comissao: number
+  liquido: number
+  seller_id: string | null
+}
+
 export default function Vendedores() {
   const [scks, setScks] = useState<SckRow[]>([])
+  const [afiliados, setAfiliados] = useState<AfiRow[]>([])
   const [sellers, setSellers] = useState<Seller[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
@@ -31,15 +41,20 @@ export default function Vendedores() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     setErro(null)
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, r3] = await Promise.all([
       supabase.rpc('hotmart_scks'),
       supabase.from('sellers').select('*').order('name'),
+      supabase.rpc('hotmart_affiliates'),
     ])
     if (r1.error) setErro('Erro ao carregar os sck: ' + r1.error.message)
     else setScks(((r1.data as SckRow[]) ?? []).map((s) => ({
       ...s, vendas: Number(s.vendas), bruto: Number(s.bruto), liquido: Number(s.liquido),
     })))
     setSellers((r2.data as Seller[]) ?? [])
+    if (r3.error) setErro('Erro ao carregar os afiliados: ' + r3.error.message)
+    else setAfiliados(((r3.data as AfiRow[]) ?? []).map((a) => ({
+      ...a, vendas: Number(a.vendas), comissao: Number(a.comissao), liquido: Number(a.liquido),
+    })))
     setCarregando(false)
   }, [])
 
@@ -69,6 +84,14 @@ export default function Vendedores() {
       .from('hotmart_sck_map')
       .upsert({ sck, seller_id: sellerId, updated_at: new Date().toISOString() }, { onConflict: 'sck' })
     if (error) { setErro('Erro ao salvar o mapeamento: ' + error.message); carregar() }
+  }
+
+  const setAfiliadoVendedor = async (affiliate: string, sellerId: string | null) => {
+    setAfiliados((prev) => prev.map((r) => (r.affiliate === affiliate ? { ...r, seller_id: sellerId } : r)))
+    const { error } = await supabase
+      .from('hotmart_affiliate_map')
+      .upsert({ affiliate, seller_id: sellerId, updated_at: new Date().toISOString() }, { onConflict: 'affiliate' })
+    if (error) { setErro('Erro ao salvar o afiliado: ' + error.message); carregar() }
   }
 
   // KPIs sobre os CANDIDATOS (sem ruído) — onde mora o trabalho real
@@ -199,6 +222,56 @@ export default function Vendedores() {
                         className={inputCls + (!r.seller_id && !r.is_ruido ? ' border-warning' : '')}
                         value={r.seller_id ?? ''}
                         onChange={(e) => setVendedor(r.sck, e.target.value || null)}
+                      >
+                        <option value="">— sem vendedor —</option>
+                        {sellers.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* de-para afiliado → vendedor (mesma pessoa do sck) */}
+      <Card>
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-sm font-medium text-fg">Afiliados → vendedor <span className="text-fg-subtle font-normal">({afiliados.length})</span></p>
+          <p className="text-xs text-fg-subtle mt-0.5">Mesma pessoa do sck — o nome vem da Hotmart (canônico). Mapeie pra unificar o total por pessoa nos dois canais.</p>
+        </div>
+        {afiliados.length === 0 ? (
+          <Vazio mensagem="Nenhum afiliado nas vendas. Os afiliados aparecem conforme o sync de comissões preenche." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm tnum">
+              <thead>
+                <tr className="border-b border-border text-xs text-fg-subtle uppercase tracking-wide">
+                  <th className="text-left px-4 h-10 font-medium">Afiliado</th>
+                  <th className="text-right px-4 h-10 font-medium">Vendas</th>
+                  <th className="text-right px-4 h-10 font-medium">Comissão</th>
+                  <th className="text-right px-4 h-10 font-medium">Líquido</th>
+                  <th className="text-left px-4 h-10 font-medium w-64">Vendedor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {afiliados.map((r) => (
+                  <tr
+                    key={r.affiliate}
+                    className={`border-b border-border last:border-0 hover:bg-surface-2 ${!r.seller_id ? 'bg-warning-bg/40' : ''}`}
+                  >
+                    <td className="px-4 py-2 text-fg"><span className="break-all">{r.affiliate}</span></td>
+                    <td className="px-4 py-2 text-right text-fg-muted">{r.vendas}</td>
+                    <td className="px-4 py-2 text-right text-warning">{fmtBRL(r.comissao)}</td>
+                    <td className="px-4 py-2 text-right font-medium text-fg">{fmtBRL(r.liquido)}</td>
+                    <td className="px-4 py-2">
+                      <select
+                        className={inputCls + (!r.seller_id ? ' border-warning' : '')}
+                        value={r.seller_id ?? ''}
+                        onChange={(e) => setAfiliadoVendedor(r.affiliate, e.target.value || null)}
                       >
                         <option value="">— sem vendedor —</option>
                         {sellers.map((s) => (
