@@ -4,10 +4,10 @@ import { Card, KPICard, KPIStrip } from '../ui'
 import type { TxView } from './ExportMenu'
 import type { ChartOfAccount } from '../../lib/types'
 
-// Dashboard por fatura: KPIs (total/ticket/a-classificar) + recorte por Plano de
-// Contas (donut + ranking, com drill-down que filtra a tabela) + composição por
-// natureza. Usa o sinal contábil (valorComSinal: débito soma, crédito abate).
-// Espelha o recorte por categoria do app antigo, agora por conta do plano.
+// Dashboard por fatura: KPIs (total/ticket/a-classificar) + um bloco único com
+// "Por natureza" (composição) e "Gasto por Plano de Contas" (ranking, com
+// drill-down que filtra a tabela). Usa o sinal contábil (valorComSinal: débito
+// soma, crédito abate). Espelha o recorte por categoria do app antigo, por conta.
 
 const CHART_COLORS = [
   '#534AB7', '#D4537E', '#D85A30', '#1D9E75', '#378ADD',
@@ -97,10 +97,31 @@ export default function FaturaDashboard({
           Classifique os lançamentos abaixo (coluna <span className="text-fg-muted">Plano de Contas</span>) pra ver o gasto por conta.
         </Card>
       ) : (
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-fg mb-4">Gasto por Plano de Contas</h3>
-          <div className="flex flex-col lg:flex-row gap-6 items-center">
-            <div className="flex-1 min-w-0 w-full">
+        // mesmo bloco (um card) com duas seções separadas por divisória
+        <Card className="p-5 space-y-5">
+          {naturezas.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-fg mb-3">Por natureza</h3>
+              <div className="flex h-3 rounded-full overflow-hidden mb-3">
+                {naturezas.map((n) => (
+                  <div key={n.nat} style={{ background: NATURE_COLORS[n.nat] ?? NEUTRO, width: `${(n.total / totalNat) * 100}%` }} title={NATURE_LABELS[n.nat] ?? n.nat} />
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+                {naturezas.map((n) => (
+                  <div key={n.nat} className="flex items-center gap-2 text-xs">
+                    <span className="w-2.5 h-2.5 rounded-sm" style={{ background: NATURE_COLORS[n.nat] ?? NEUTRO }} />
+                    <span className="text-fg-muted">{NATURE_LABELS[n.nat] ?? n.nat}</span>
+                    <span className="text-fg font-medium tnum">{fmt(n.total)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className={naturezas.length > 0 ? 'border-t border-border pt-5' : ''}>
+            <h3 className="text-sm font-semibold text-fg mb-4">Gasto por Plano de Contas</h3>
+            <div>
               {linhas.map((a, i) => {
                 const ativo = (a.key === SEM && contaFiltro === SEM) || (!!a.id && contaFiltro === a.id)
                 return (
@@ -123,58 +144,9 @@ export default function FaturaDashboard({
                 )
               })}
             </div>
-            <DonutChart slices={slices} total={totalClass} />
-          </div>
-        </Card>
-      )}
-
-      {naturezas.length > 0 && (
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-fg mb-3">Por natureza</h3>
-          <div className="flex h-3 rounded-full overflow-hidden mb-3">
-            {naturezas.map((n) => (
-              <div key={n.nat} style={{ background: NATURE_COLORS[n.nat] ?? NEUTRO, width: `${(n.total / totalNat) * 100}%` }} title={NATURE_LABELS[n.nat] ?? n.nat} />
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-            {naturezas.map((n) => (
-              <div key={n.nat} className="flex items-center gap-2 text-xs">
-                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: NATURE_COLORS[n.nat] ?? NEUTRO }} />
-                <span className="text-fg-muted">{NATURE_LABELS[n.nat] ?? n.nat}</span>
-                <span className="text-fg font-medium tnum">{fmt(n.total)}</span>
-              </div>
-            ))}
           </div>
         </Card>
       )}
     </div>
-  )
-}
-
-// Donut oco em SVG puro (sem recharts) — total classificado no centro.
-function DonutChart({ slices, total }: { slices: { pct: number; color: string }[]; total: number }) {
-  const size = 188, cx = 94, cy = 94, r = 72, inner = 44
-  if (!total) return null
-  // offsets acumulados via prefix-sum (sem variável mutável — react-compiler)
-  const arcs = slices.map((s, i) => {
-    const start = slices.slice(0, i).reduce((acc, x) => acc + x.pct / 100, 0)
-    return { ...s, start, end: start + s.pct / 100 }
-  })
-  const pt = (pct: number, radius: number) => {
-    const a = pct * 2 * Math.PI - Math.PI / 2
-    return { x: cx + radius * Math.cos(a), y: cy + radius * Math.sin(a) }
-  }
-  return (
-    <svg width={size} height={size} className="shrink-0">
-      {arcs.map((s, i) => {
-        if (s.end - s.start < 0.0001) return null
-        const s1 = pt(s.start, r), s2 = pt(s.end, r), i1 = pt(s.start, inner), i2 = pt(s.end, inner)
-        const large = s.end - s.start > 0.5 ? 1 : 0
-        const d = `M ${i1.x} ${i1.y} L ${s1.x} ${s1.y} A ${r} ${r} 0 ${large} 1 ${s2.x} ${s2.y} L ${i2.x} ${i2.y} A ${inner} ${inner} 0 ${large} 0 ${i1.x} ${i1.y} Z`
-        return <path key={i} d={d} fill={s.color} stroke="#fff" strokeWidth={1.5} />
-      })}
-      <text x={cx} y={cy - 8} textAnchor="middle" fontSize={10} fill="#94a3b8" fontWeight={700}>CLASSIFICADO</text>
-      <text x={cx} y={cy + 11} textAnchor="middle" fontSize={13} fill="#0f172a" fontWeight={800}>{fmt(total)}</text>
-    </svg>
   )
 }
