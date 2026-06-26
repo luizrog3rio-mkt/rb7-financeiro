@@ -75,9 +75,10 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `HOTMART_SYNC_SERVICE_KEY` → escreve com a service key). Secrets
   `HOTMART_CLIENT_ID`/`HOTMART_CLIENT_SECRET` no env da function. Modos:
   `{debug:true}` (1ª venda crua+mapeada sem gravar), `{refresh_status:N}`
-  (só serviço: re-checa N vendas por `?transaction=<id>` p/ capturar estorno) e
+  (só serviço: re-checa N vendas por `?transaction=<id>` p/ capturar estorno),
   `{refresh_commissions:N}` (só serviço: preenche afiliado/coprodução/líquido
-  exato via `/sales/commissions`).
+  exato via `/sales/commissions`) e `{refresh_sck:N}` (só serviço: backfill do
+  `sck` via `purchase.tracking.source_sck`, UPDATE não-destrutivo).
 - **Crons** (pg_cron, lendo o segredo do **Vault** `hotmart_service_key` via
   `net.http_post`, timeout 120s): `hotmart-sync-diario` (09:00 UTC, descoberta
   de vendas novas, janela 1 mês), `hotmart-refresh-status-diario` (09:30 UTC,
@@ -85,6 +86,18 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `hotmart-commissions-diario` (09:45 UTC, **por último**, preenche afiliado/
   coprodução/líquido exato via modo `refresh_commissions=400`, rodízio por
   `commission_checked_at` + re-checa a janela recente ~35d que o sync regrava).
+- **Vendedores diretos (atribuição por `sck`)**: a API `/sales/history` traz
+  `purchase.tracking.source_sck` (NÃO `sck`) — `mapSale` o grava em
+  `hotmart_sales.sck`. Valor é ruidoso: visitor-id (`<ts>_<id>`) / UTM (`a|b|c`)
+  **ou** código fixo de vendedor (`raphaella_silva`, `maikom_vinicius`,
+  `luiz_otavio`…, com variantes de grafia). Tabelas `sellers` (cadastro) +
+  `hotmart_sck_map` (de-para sck→vendedor, espelha `hotmart_product_map`). RPCs
+  `hotmart_scks` (de-para, com `is_ruido`) e `hotmart_by_seller` (relatório). Tela
+  **`/vendedores`** cadastra vendedor e mapeia o sck; seção "Total por vendedor"
+  na tela Hotmart. Backfill do sck por `refresh_sck` (cron temporário
+  auto-terminável); vendas novas pegam sck pelo sync diário (sem cron permanente).
+  Os mesmos nomes aparecem como AFILIADO e como VENDEDOR (a pessoa vende ora pelo
+  link de afiliado, ora por sck) — lentes separadas, sem conflito.
 - **Mapeamento de valores validado contra dados reais (2026-06-11), ver
   [[hotmart-mapeamento-campos]]**: `total_amount`=`purchase.price.value`
   (VALOR TOTAL pago, **inclui juros de parcelamento**); `gross_amount`=

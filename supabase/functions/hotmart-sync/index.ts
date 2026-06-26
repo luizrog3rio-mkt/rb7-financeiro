@@ -15,6 +15,8 @@
 // Modos:
 //  - POST {company_id, months?}            → usuário (JWT): upsert respeitando RLS
 //  - POST {company_id, debug:true}         → 1ª venda crua+mapeada, NÃO grava
+//  - POST {company_id, refresh_sck:N}      → SÓ serviço: backfill do sck (tracking
+//    .source_sck) nas vendas antigas, UPDATE não-destrutivo (só sck + sck_checked_at)
 //  - POST {company_id, refresh_status:N}   → SÓ serviço: re-checa N vendas por
 //    ?transaction=<id> e atualiza estornos (a busca por data não traz reembolso)
 //  - POST {company_id, refresh_commissions:N} → SÓ serviço: preenche afiliado/
@@ -83,6 +85,7 @@ function mapSale(it: any, companyId: string) {
     payment_method: p.payment?.type ?? null,
     status: String(p.status ?? 'UNKNOWN'),
     buyer: it?.buyer?.name ?? null,
+    sck: it?.purchase?.tracking?.source_sck ?? null, // tracking do checkout (vendedor direto/visitor-id/UTM)
     company_id: companyId,
   }
 }
@@ -103,7 +106,7 @@ Deno.serve(async (req) => {
     // quota da Hotmart); a escrita real ainda é protegida pelo RLS de equipe
     if (!isService && !/^Bearer\s+eyJ/.test(auth ?? '')) return json({ error: 'sem autorização' }, 401)
 
-    const { company_id, debug, refresh_status, refresh_commissions, months, start: startArg, end: endArg } = await req.json().catch(() => ({}))
+    const { company_id, debug, refresh_sck, refresh_status, refresh_commissions, months, start: startArg, end: endArg } = await req.json().catch(() => ({}))
     if (!company_id) return json({ error: 'company_id obrigatório' }, 400)
 
     const clientId = Deno.env.get('HOTMART_CLIENT_ID')
@@ -118,6 +121,44 @@ Deno.serve(async (req) => {
     const tokenJson = await tokenRes.json()
     const accessToken = tokenJson.access_token
     if (!accessToken) return json({ error: 'token Hotmart sem access_token', body: tokenJson }, 502)
+
+    // 1a-ter) modo refresh_sck (SÓ serviço): backfill do sck nas vendas EXISTENTES.
+    //   A API /sales/history traz purchase.tracking.source_sck — que vira o sck da
+    //   venda (vendedor direto, ou ruído visitor-id/UTM). Re-busca por
+    //   ?transaction=<id> e faz UPDATE não-destrutivo (só sck quando existe, sempre
+    //   sck_checked_at). Rodízio por sck_checked_at IS NULL. Vendas NOVAS já recebem
+    //   sck pelo mapSale do sync diário — este modo é só pro histórico.
+    if (refresh_sck) {
+      if (!isService) return json({ error: 'refresh_sck é só modo-serviço' }, 403)
+      const N = Math.max(1, Math.min(500, Number(refresh_sck) || 200))
+      const sbsvc = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey!)
+      const { data: cands, error: eSel } = await sbsvc
+        .from('hotmart_sales')
+        .select('transaction_code')
+        .eq('company_id', company_id)
+        .is('sck_checked_at', null)
+        .order('sale_date', { ascending: false })
+        .limit(N)
+      if (eSel) return json({ error: 'falha ao selecionar candidatos', detalhe: eSel.message }, 500)
+      const t0 = Date.now()
+      const agora = new Date().toISOString()
+      let verificados = 0
+      let comSck = 0
+      for (const c of (cands ?? [])) {
+        if (Date.now() - t0 > 100000) break // guarda de tempo
+        const u = new URL(HOTMART_SALES_URL)
+        u.searchParams.set('transaction', c.transaction_code)
+        const r = await fetch(u.toString(), { headers: { Authorization: `Bearer ${accessToken}` } })
+        if (!r.ok) continue
+        const it = (await r.json())?.items?.[0]
+        const ss = it?.purchase?.tracking?.source_sck
+        const patch: Record<string, unknown> = { sck_checked_at: agora }
+        if (ss != null && String(ss).trim() !== '') { patch.sck = String(ss).trim(); comSck++ }
+        await sbsvc.from('hotmart_sales').update(patch).eq('transaction_code', c.transaction_code)
+        verificados++
+      }
+      return json({ ok: true, refresh_sck: true, candidatos: cands?.length ?? 0, verificados, com_sck: comSck })
+    }
 
     // 1a-bis) modo refresh_commissions (SÓ serviço): preenche afiliado/coprodução
     //   e o líquido EXATO via /sales/commissions?transaction=<id> (que SEMPRE

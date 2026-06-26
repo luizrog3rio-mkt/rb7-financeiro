@@ -132,7 +132,24 @@ export interface HotmartSale {
   payment_method: string | null
   status: string
   buyer: string | null
+  sck: string | null            // purchase.tracking.source_sck (vendedor direto / visitor-id / UTM)
   imported_at: string
+}
+
+// Vendedor direto (atribuição por sck, não-afiliado) + de-para sck → vendedor
+export interface Seller {
+  id: string
+  name: string
+  code: string | null
+  active: boolean
+  company_id: string | null
+  created_at: string
+}
+
+export interface HotmartSckMap {
+  sck: string
+  seller_id: string | null
+  updated_at?: string
 }
 
 // ── Tabelas vivas do "mundo cartão" (modelo PT do app original) ──

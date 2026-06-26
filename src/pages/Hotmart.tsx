@@ -40,6 +40,8 @@ function StatusHotmart({ status }: { status: string }) {
 
 // Linha do "Total por afiliado" (RPC hotmart_by_affiliate, agregação no banco)
 type AfiliadoRow = { afiliado: string; qtd: number; comissao: number; bruto: number; total: number; liquido_produtor: number }
+// Linha do "Total por vendedor" (RPC hotmart_by_seller, atribuição por sck)
+type VendedorRow = { vendedor: string; qtd: number; bruto: number; total: number; liquido: number }
 
 export default function Hotmart() {
   const { empresas, empresaAtiva, isAdmin } = useApp()
@@ -53,6 +55,7 @@ export default function Hotmart() {
   const [dataAte, setDataAte] = useState('')
   const [totais, setTotais] = useState({ qtd: 0, total: 0, bruto: 0, taxas: 0, afiliados: 0, liquido: 0, foraMoeda: 0 })
   const [afiliados, setAfiliados] = useState<AfiliadoRow[]>([])
+  const [vendedores, setVendedores] = useState<VendedorRow[]>([])
 
   useEffect(() => {
     if (empresas.length && !empresaDestino) setEmpresaDestino(empresaAtiva?.id ?? empresas[0].id)
@@ -93,6 +96,18 @@ export default function Hotmart() {
     setAfiliados(((afi as AfiliadoRow[]) ?? []).map((a) => ({
       afiliado: a.afiliado, qtd: Number(a.qtd), comissao: Number(a.comissao),
       bruto: Number(a.bruto), total: Number(a.total), liquido_produtor: Number(a.liquido_produtor),
+    })))
+
+    // Total por vendedor (atribuição por sck; vazio até mapear sck → vendedor em /vendedores)
+    const { data: vend, error: e4 } = await supabase.rpc('hotmart_by_seller', {
+      p_company: empresaAtiva?.id ?? null,
+      p_start: pStart,
+      p_end: pEnd,
+    })
+    if (e4) { setErro('Erro nos vendedores: ' + e4.message); return }
+    setVendedores(((vend as VendedorRow[]) ?? []).map((v) => ({
+      vendedor: v.vendedor, qtd: Number(v.qtd),
+      bruto: Number(v.bruto), total: Number(v.total), liquido: Number(v.liquido),
     })))
   }, [empresaAtiva, dataDe, dataAte])
 
@@ -280,6 +295,41 @@ export default function Hotmart() {
                   <td className="px-3 py-2 text-right tnum text-warning">{fmtBRL(a.comissao)}</td>
                   <td className="px-3 py-2 text-right tnum text-fg-muted">{fmtBRL(a.bruto)}</td>
                   <td className="px-5 py-2 text-right tnum font-medium text-revenue">{fmtBRL(a.liquido_produtor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      <Card className="mt-6">
+        <div className="px-5 pt-5 pb-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-fg">Total por vendedor</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">
+            Vendas atribuídas a vendedores diretos pelo sck do checkout (período selecionado · moeda BRL). Mapeie os sck em <span className="text-fg-muted">Vendedores</span>.
+          </p>
+        </div>
+        {vendedores.length === 0 ? (
+          <Vazio mensagem="Nenhuma venda atribuída a vendedor. Cadastre vendedores e mapeie os códigos de sck na tela Vendedores." />
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-fg-subtle border-b border-border">
+                <th className="font-medium px-5 py-2">Vendedor</th>
+                <th className="font-medium px-3 py-2 text-right">Vendas</th>
+                <th className="font-medium px-3 py-2 text-right">Bruto</th>
+                <th className="font-medium px-3 py-2 text-right">Valor Total</th>
+                <th className="font-medium px-5 py-2 text-right">Líquido RB7</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendedores.map((v) => (
+                <tr key={v.vendedor} className="border-b border-border last:border-0">
+                  <td className="px-5 py-2 text-fg">{v.vendedor}</td>
+                  <td className="px-3 py-2 text-right tnum text-fg-muted">{v.qtd}</td>
+                  <td className="px-3 py-2 text-right tnum text-fg-muted">{fmtBRL(v.bruto)}</td>
+                  <td className="px-3 py-2 text-right tnum text-fg-muted">{fmtBRL(v.total)}</td>
+                  <td className="px-5 py-2 text-right tnum font-medium text-revenue">{fmtBRL(v.liquido)}</td>
                 </tr>
               ))}
             </tbody>

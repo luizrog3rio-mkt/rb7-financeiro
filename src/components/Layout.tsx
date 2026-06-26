@@ -19,6 +19,7 @@ import {
   Lock,
   ArrowLeftRight,
   Shuffle,
+  Handshake,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -57,6 +58,7 @@ const grupos: Grupo[] = [
     itens: [
       { to: '/hotmart', rotulo: 'Hotmart', icone: ShoppingCart },
       { to: '/produtos-hotmart', rotulo: 'Produtos Hotmart', icone: Shuffle },
+      { to: '/vendedores', rotulo: 'Vendedores', icone: Handshake },
     ],
   },
   {
