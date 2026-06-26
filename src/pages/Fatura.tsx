@@ -36,6 +36,7 @@ export default function Fatura() {
   const [transactions, setTransactions] = useState<TxView[]>([])
   const [chartAccounts, setChartAccounts] = useState<ChartOfAccount[]>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+  const [contaFiltro, setContaFiltro] = useState<string | null>(null) // drill-down do dashboard ('__sem_conta__' = não-classificados)
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([])
   const [pendentes, setPendentes] = useState<PurchaseItem[] | null>(
     (location.state as { pendentes?: PurchaseItem[] } | null)?.pendentes?.length
@@ -181,8 +182,17 @@ export default function Fatura() {
   }, [])
 
   // ── derivados ──────────────────────────────────────────────────────────────
-  const filtered = transactions.filter((t) => t.memo.toLowerCase().includes(search.toLowerCase()))
+  const filtered = transactions.filter((t) =>
+    t.memo.toLowerCase().includes(search.toLowerCase()) &&
+    (contaFiltro == null ||
+      (contaFiltro === '__sem_conta__' ? !t.chart_of_account_id : t.chart_of_account_id === contaFiltro))
+  )
   const totalFiltered = filtered.reduce((s, t) => s + valorComSinal(t), 0)
+  const contaFiltroLabel = contaFiltro === '__sem_conta__'
+    ? '(sem conta)'
+    : contaFiltro
+      ? (() => { const c = chartAccounts.find((a) => a.id === contaFiltro); return c ? `${c.code} – ${c.name}` : 'conta' })()
+      : null
 
   // seleção em massa (conta só os marcados VISÍVEIS — respeita a busca)
   const idsVisiveis = new Set(filtered.map((t) => t.id))
@@ -285,7 +295,12 @@ export default function Fatura() {
       {activeTab === 'lancamentos' && (
         <>
           <div className="mb-4">
-            <FaturaDashboard transactions={transactions} />
+            <FaturaDashboard
+              transactions={transactions}
+              chartAccounts={chartAccounts}
+              contaFiltro={contaFiltro}
+              onSelecionarConta={setContaFiltro}
+            />
           </div>
           <Card className="p-4 mb-4">
             <div className="relative max-w-sm">
@@ -320,6 +335,15 @@ export default function Fatura() {
               <button onClick={() => setRowSelection({})} className="ml-auto text-xs font-medium text-fg-muted hover:text-fg whitespace-nowrap">
                 Limpar seleção
               </button>
+            </div>
+          )}
+
+          {contaFiltro && (
+            <div className="flex items-center gap-2 mb-3 text-sm">
+              <span className="inline-flex items-center gap-2 rounded-full bg-brand-subtle text-brand px-3 py-1 font-medium">
+                Filtrando por: {contaFiltroLabel}
+                <button onClick={() => setContaFiltro(null)} className="text-brand/70 hover:text-brand" title="Limpar filtro" aria-label="Limpar filtro">✕</button>
+              </span>
             </div>
           )}
 
