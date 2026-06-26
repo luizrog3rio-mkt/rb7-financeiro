@@ -97,9 +97,9 @@ export default function FaturaDashboard({
           Classifique os lançamentos abaixo (coluna <span className="text-fg-muted">Plano de Contas</span>) pra ver o gasto por conta.
         </Card>
       ) : (
-        <>
-          {/* Bloco 1: ranking por conta (largura cheia) */}
-          <Card className="p-5">
+        <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+          {/* Bloco 1: ranking por conta */}
+          <Card className="p-5 flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-fg mb-4">Gasto por Plano de Contas</h3>
             <div>
               {linhas.map((a, i) => {
@@ -127,10 +127,10 @@ export default function FaturaDashboard({
           </Card>
 
           {/* Bloco 2: donut (composição do classificado) */}
-          <Card className="p-5 flex justify-center">
+          <Card className="p-5 flex items-center justify-center shrink-0">
             <DonutChart slices={slices} total={totalClass} />
           </Card>
-        </>
+        </div>
       )}
 
       {naturezas.length > 0 && (
