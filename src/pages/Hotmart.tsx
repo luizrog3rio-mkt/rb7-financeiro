@@ -8,6 +8,7 @@ import type { HotmartSale } from '../lib/types'
 import { Card, PageHeader, Vazio, ErroBanner, KPICard, Alert, Badge, type BadgeTom, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 import DataTable, { type DataColumn } from '../components/DataTable'
 import DateRangePicker from '../components/DateRangePicker'
+import { useRealtimeRefetch } from '../hooks/useRealtimeRefetch'
 
 // Etapa 6 — Conciliação Hotmart. Port do Hotmart.tsx do rb7 pra hotmart_sales.
 // Feature 100% exclusiva do rb7 (não existia no app antigo). Upsert por
@@ -118,6 +119,14 @@ export default function Hotmart() {
   }, [empresaAtiva, dataDe, dataAte])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Realtime: o webhook hotmart-webhook grava/atualiza hotmart_sales → refetch
+  // (debounced). 3 das 4 fontes são RPCs agregadas, então re-buscar tudo é mais
+  // simples e correto que merge incremental. Filtro server-side por empresa; no
+  // consolidado (empresaAtiva null) ouve todas. Só re-subscreve ao trocar empresa.
+  useRealtimeRefetch('hotmart_sales', carregar, {
+    filter: empresaAtiva ? `company_id=eq.${empresaAtiva.id}` : undefined,
+  })
 
   const importar = async (file: File) => {
     if (!empresaDestino) { setMsg('Selecione a empresa de destino.'); return }

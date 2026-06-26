@@ -139,6 +139,28 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   de receita (regex PT+EN) vive em `hotmart_totals` e em `lib/hotmart.ts`.
 - Upsert MERGE por `transaction_code` (reimport/sync atualiza status —
   reembolso/chargeback refletem).
+- **Webhook 2.0 em tempo real** (no repo desde 2026-06-26; **pendente de ativação**
+  — migrations a aplicar + deploy + secret `HOTMART_HOTTOK` + cadastro no painel
+  Hotmart): Edge Function **`hotmart-webhook`** (`verify_jwt=false`) valida o
+  `hottok` (header `x-hotmart-hottok`, tempo constante) → grava o evento CRU
+  durável em `hotmart_webhook_events` (service-only, PII; `dedupe_key` UNIQUE
+  nunca-NULL) → deriva inline pra `hotmart_sales` via RPC `apply_hotmart_webhook_event`
+  → responde **200 assim que durável**. **Divergência consciente** do
+  `docs/HOTMART-REFERENCIA.md` §2.5.8 ("falha pós-cru → 5xx"): só devolve 5xx se o
+  persist do CRU falhar — falha de derivação fica em `process_error` e o cron
+  `hotmart-webhook-drain` (1 min, SQL puro, `drain_hotmart_webhook_events`)
+  reprocessa; motivo: 5xx em 5 reentregas faz a Hotmart **auto-desativar** a config.
+  Tripla rede: inline → drain → crons da API. **Anti-regressão de estorno por
+  TRIGGER** `trg_hotmart_status_guard` (congela REFUNDED/CHARGEBACK contra QUALQUER
+  writer — webhook, sync e `refresh_status`); status canônico vem do `event`
+  (`hotmart_canonical_status`), nunca do default PT `'aprovada'`; ordem por
+  `webhook_event_at` (newest-wins). Patch **não-destrutivo** (refund chega sem
+  `origin`/`buyer`/`price`); financeiro só quando há `price`; comissões seguem donas
+  do `refresh_commissions`. Captura o **`xcode`** (coluna nova `hotmart_sales.xcod`)
+  que a API não traz. A tela **`/hotmart`** atualiza sozinha via Supabase **Realtime**
+  (`hotmart_sales` na publication; hook `src/hooks/useRealtimeRefetch.ts` →
+  `carregar()` debounced). Os ~24 WARNs do lint não sobem (o `setState` do hook é
+  assíncrono). Pegadinhas-fonte em `docs/HOTMART-REFERENCIA.md` §2.4.
 
 ## Convenções
 
