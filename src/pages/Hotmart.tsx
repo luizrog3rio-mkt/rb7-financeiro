@@ -39,6 +39,18 @@ function StatusHotmart({ status }: { status: string }) {
   return <Badge tom={tomStatus(status)}>{rotuloStatus(status)}</Badge>
 }
 
+// Origem da venda (derivada ao vivo pela view hotmart_sales_origin via de-para canal→origem)
+const ORIGEM_META: Record<string, { rotulo: string; tom: BadgeTom }> = {
+  organico: { rotulo: 'Orgânico', tom: 'revenue' },
+  trafego: { rotulo: 'Tráfego', tom: 'warning' },
+  comercial: { rotulo: 'Comercial', tom: 'brand' },
+  a_classificar: { rotulo: 'A classificar', tom: 'muted' },
+}
+function OrigemBadge({ origem }: { origem?: string }) {
+  const m = ORIGEM_META[origem ?? 'a_classificar'] ?? ORIGEM_META.a_classificar
+  return <Badge tom={m.tom}>{m.rotulo}</Badge>
+}
+
 // Linha do "Total por afiliado" (RPC hotmart_by_affiliate, agregação no banco)
 type AfiliadoRow = { afiliado: string; qtd: number; comissao: number; bruto: number; total: number; liquido_produtor: number }
 // Linha do "Total por pessoa" (RPC hotmart_by_person): vendas pelos 2 canais —
@@ -72,7 +84,7 @@ export default function Hotmart() {
     const pStart: string | null = dataDe || null
     const pEnd: string | null = dataAte || null
     // tabela: 300 vendas mais recentes (o PostgREST limita a 1000 mesmo)
-    let q = supabase.from('hotmart_sales').select('*').order('sale_date', { ascending: false }).limit(300)
+    let q = supabase.from('hotmart_sales_origin').select('*').order('sale_date', { ascending: false }).limit(300)
     if (empresaAtiva) q = q.eq('company_id', empresaAtiva.id)
     if (pStart) q = q.gte('sale_date', pStart)
     if (pEnd) q = q.lte('sale_date', pEnd)
@@ -186,6 +198,7 @@ export default function Hotmart() {
         )}
       </span>
     ) },
+    { id: 'origem', header: 'Origem', size: 110, cell: (v) => <OrigemBadge origem={v.origem} /> },
     { id: 'transaction_code', header: 'Transação', size: 130, cell: (v) => <span className="text-xs text-fg-subtle tnum">{v.transaction_code}</span> },
     { id: 'total_amount', header: 'Valor Total', size: 120, align: 'right', cell: (v) => <span className="tnum">{fmtBRL(Number(v.total_amount))}</span> },
     { id: 'gross_amount', header: 'Bruto', size: 110, align: 'right', cell: (v) => <span className="tnum">{fmtBRL(Number(v.gross_amount))}</span> },

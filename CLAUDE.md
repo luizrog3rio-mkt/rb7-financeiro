@@ -161,6 +161,17 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   (`hotmart_sales` na publication; hook `src/hooks/useRealtimeRefetch.ts` →
   `carregar()` debounced). Os ~24 WARNs do lint não sobem (o `setState` do hook é
   assíncrono). Pegadinhas-fonte em `docs/HOTMART-REFERENCIA.md` §2.4.
+- **Origem da venda (Orgânico/Tráfego/Comercial)** (2026-06-27): de-para `canal → origem`
+  espelhando o sck→vendedor, na tela **`/origem`** (grupo Receitas & Vendas). A origem é
+  **derivada ao vivo** pela view `hotmart_sales_origin` (`security_invoker`; SEM coluna na venda,
+  SEM trigger, NÃO toca webhook/sync) — remapear um canal reclassifica as ~14,9k vendas na hora.
+  `canal` = canal-base do `src` (`hotmart_canal_base`: 1º segmento antes de `| _` espaço, folding
+  por `translate` pra ficar `immutable`; ~50 valores vs 1.318 do `src` cru). Precedência:
+  canal mapeado (`hotmart_origin_map`) > vendedor (`sck_map` → comercial) > `a_classificar`. As
+  ~26% de vendas sem `src` nem `sck` ficam em `a_classificar` (teto estrutural, exibido, não
+  chutado). RPCs `hotmart_channels` (de-para + sugestão conservadora via `hotmart_origin_suggest`
+  + flag `is_ruido`) e `hotmart_by_origin` (total por origem; soma bate com `hotmart_totals`). A
+  tabela da Hotmart lê da view `hotmart_sales_origin` e exibe a coluna Origem.
 
 ## Convenções
 

@@ -134,6 +134,7 @@ export interface HotmartSale {
   buyer: string | null
   sck: string | null            // purchase.tracking.source_sck (vendedor direto / visitor-id / UTM)
   imported_at: string
+  origem?: string               // derivado pela view hotmart_sales_origin (organico/trafego/comercial/a_classificar)
 }
 
 // Vendedor direto (atribuição por sck, não-afiliado) + de-para sck → vendedor
