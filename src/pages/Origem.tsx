@@ -28,6 +28,7 @@ export default function Origem() {
   const [totais, setTotais] = useState<GrupoTotal[]>([])
   const [regras, setRegras] = useState<Regra[]>([])
   const [filtro, setFiltro] = useState<Filtro>('a_classificar')
+  const [busca, setBusca] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
 
@@ -236,11 +237,18 @@ export default function Origem() {
           <div>
             <h2 className="text-sm font-semibold text-fg">Vendas</h2>
             <p className="text-xs text-fg-subtle mt-0.5">
-              {filtro === 'a_classificar' && 'Até 300 sem classificação. Marque Grupo › Canal › Vendedor em cada linha.'}
+              {filtro === 'a_classificar' && 'Até 300 sem classificação.'}
               {filtro === 'classificadas' && 'Até 300 já classificadas.'}
               {filtro === 'todas' && 'Até 300 mais recentes.'}
             </p>
           </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              className="rounded-control border border-border bg-surface px-3 py-1 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand w-48"
+              placeholder="Pesquisar..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
           <div className="flex gap-1 shrink-0">
             {(['a_classificar', 'classificadas', 'todas'] as Filtro[]).map((f) => (
               <button
@@ -252,12 +260,20 @@ export default function Origem() {
               </button>
             ))}
           </div>
+          </div>
         </div>
         {carregando ? (
           <Vazio mensagem="Carregando…" />
-        ) : vendas.length === 0 ? (
-          <Vazio mensagem="Nenhuma venda encontrada." />
         ) : (
+          (() => {
+            const q = busca.toLowerCase()
+            const lista = q ? vendas.filter((v) =>
+              [v.product, v.src, v.sck, v.xcod, v.affiliate, nomeGrupo(v.group_id), nomeCanal(v.channel_id), nomeSeller(v.seller_id)]
+                .some((s) => s && String(s).toLowerCase().includes(q))
+            ) : vendas
+            return lista.length === 0 ? (
+              <Vazio mensagem={q ? 'Nenhuma venda encontrada para essa pesquisa.' : 'Nenhuma venda encontrada.'} />
+            ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[11px]">
               <thead>
@@ -275,7 +291,7 @@ export default function Origem() {
                 </tr>
               </thead>
               <tbody>
-                {vendas.map((v) => (
+                {lista.map((v) => (
                   <tr key={v.id} className="border-b border-border last:border-0 hover:bg-surface-2 align-top">
                     <td className="px-3 py-2 whitespace-nowrap text-fg-muted tnum">{fmtData(v.sale_date)}</td>
                     <td className="px-3 py-2 text-fg max-w-[200px] truncate" title={v.product}>{v.product}</td>
@@ -292,6 +308,8 @@ export default function Origem() {
               </tbody>
             </table>
           </div>
+            )
+          })()
         )}
       </Card>
 
