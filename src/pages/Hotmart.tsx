@@ -42,8 +42,9 @@ function StatusHotmart({ status }: { status: string }) {
 // Origem da venda (derivada ao vivo pela view hotmart_sales_origin via de-para canal→origem)
 const ORIGEM_META: Record<string, { rotulo: string; tom: BadgeTom }> = {
   organico: { rotulo: 'Orgânico', tom: 'revenue' },
-  trafego: { rotulo: 'Tráfego', tom: 'warning' },
+  trafego: { rotulo: 'Tráfego Pago', tom: 'warning' },
   comercial: { rotulo: 'Comercial', tom: 'brand' },
+  afiliado: { rotulo: 'Afiliado', tom: 'muted' },
   a_classificar: { rotulo: 'A classificar', tom: 'muted' },
 }
 function OrigemBadge({ origem }: { origem?: string }) {
@@ -53,13 +54,9 @@ function OrigemBadge({ origem }: { origem?: string }) {
 
 // Linha do "Total por afiliado" (RPC hotmart_by_affiliate, agregação no banco)
 type AfiliadoRow = { afiliado: string; qtd: number; comissao: number; bruto: number; total: number; liquido_produtor: number }
-// Linha do "Total por pessoa" (RPC hotmart_by_person): vendas pelos 2 canais —
-// sck (vendedor direto) e afiliado — lado a lado, sem dupla contagem
-type PessoaRow = {
-  vendedor: string
-  vendas_sck: number; liquido_sck: number
-  vendas_afiliado: number; comissao_afiliado: number; liquido_afiliado: number
-}
+// Linha do "Total por canal" (RPC hotmart_by_channel): vendas agrupadas pelo canal
+// de origem do modelo v2 (Grupo › Canal)
+type CanalRow = { canal: string; grupo: string; vendas: number; bruto: number; total: number; liquido: number }
 
 export default function Hotmart() {
   const { empresas, empresaAtiva, isAdmin } = useApp()
@@ -73,7 +70,7 @@ export default function Hotmart() {
   const [dataAte, setDataAte] = useState('')
   const [totais, setTotais] = useState({ qtd: 0, total: 0, bruto: 0, taxas: 0, afiliados: 0, liquido: 0, foraMoeda: 0 })
   const [afiliados, setAfiliados] = useState<AfiliadoRow[]>([])
-  const [pessoas, setPessoas] = useState<PessoaRow[]>([])
+  const [canaisOrigem, setCanaisOrigem] = useState<CanalRow[]>([])
 
   useEffect(() => {
     if (empresas.length && !empresaDestino) setEmpresaDestino(empresaAtiva?.id ?? empresas[0].id)
@@ -116,17 +113,16 @@ export default function Hotmart() {
       bruto: Number(a.bruto), total: Number(a.total), liquido_produtor: Number(a.liquido_produtor),
     })))
 
-    // Total por pessoa (sck + afiliado; vazio até mapear em /vendedores)
-    const { data: pes, error: e4 } = await supabase.rpc('hotmart_by_person', {
+    // Total por canal de origem (modelo v2: Grupo › Canal)
+    const { data: can, error: e4 } = await supabase.rpc('hotmart_by_channel', {
       p_company: empresaAtiva?.id ?? null,
       p_start: pStart,
       p_end: pEnd,
     })
-    if (e4) { setErro('Erro por pessoa: ' + e4.message); return }
-    setPessoas(((pes as PessoaRow[]) ?? []).map((v) => ({
-      vendedor: v.vendedor,
-      vendas_sck: Number(v.vendas_sck), liquido_sck: Number(v.liquido_sck),
-      vendas_afiliado: Number(v.vendas_afiliado), comissao_afiliado: Number(v.comissao_afiliado), liquido_afiliado: Number(v.liquido_afiliado),
+    if (e4) { setErro('Erro por canal: ' + e4.message); return }
+    setCanaisOrigem(((can as CanalRow[]) ?? []).map((v) => ({
+      canal: v.canal, grupo: v.grupo, vendas: Number(v.vendas),
+      bruto: Number(v.bruto), total: Number(v.total), liquido: Number(v.liquido),
     })))
   }, [empresaAtiva, dataDe, dataAte])
 
@@ -198,7 +194,8 @@ export default function Hotmart() {
         )}
       </span>
     ) },
-    { id: 'origem', header: 'Origem', size: 110, cell: (v) => <OrigemBadge origem={v.origem} /> },
+    { id: 'origem', header: 'Grupo', size: 110, cell: (v) => <OrigemBadge origem={v.origem} /> },
+    { id: 'canal', header: 'Canal', size: 130, cell: (v) => <span className="text-fg-muted">{v.canal || '—'}</span> },
     { id: 'transaction_code', header: 'Transação', size: 130, cell: (v) => <span className="text-xs text-fg-subtle tnum">{v.transaction_code}</span> },
     { id: 'total_amount', header: 'Valor Total', size: 120, align: 'right', cell: (v) => <span className="tnum">{fmtBRL(Number(v.total_amount))}</span> },
     { id: 'gross_amount', header: 'Bruto', size: 110, align: 'right', cell: (v) => <span className="tnum">{fmtBRL(Number(v.gross_amount))}</span> },
@@ -332,39 +329,33 @@ export default function Hotmart() {
 
       <Card className="mt-6">
         <div className="px-5 pt-5 pb-3 border-b border-border">
-          <h2 className="text-sm font-semibold text-fg">Total por pessoa</h2>
+          <h2 className="text-sm font-semibold text-fg">Total por canal de origem</h2>
           <p className="text-xs text-fg-subtle mt-0.5">
-            Vendas atribuídas a cada pessoa pelos dois canais — <span className="text-fg-muted">sck</span> (vendedor direto) e <span className="text-fg-muted">afiliado</span> — lado a lado (período · BRL). Mapeie em <span className="text-fg-muted">Vendedores</span>.
+            Vendas agrupadas por canal (Grupo › Canal) no período · BRL. Classifique os canais em <span className="text-fg-muted">Origem</span>.
           </p>
         </div>
-        {pessoas.length === 0 ? (
-          <Vazio mensagem="Nenhuma venda atribuída. Cadastre vendedores e mapeie os sck / afiliados na tela Vendedores." />
+        {canaisOrigem.length === 0 ? (
+          <Vazio mensagem="Nenhuma venda no período." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-fg-subtle border-b border-border">
-                  <th className="font-medium px-5 py-2" rowSpan={2}>Pessoa</th>
-                  <th className="font-medium px-3 py-1.5 text-center border-l border-border" colSpan={2}>Direto (sck)</th>
-                  <th className="font-medium px-3 py-1.5 text-center border-l border-border" colSpan={3}>Afiliado</th>
-                </tr>
-                <tr className="text-left text-fg-subtle border-b border-border text-xs">
-                  <th className="font-medium px-3 py-1.5 text-right border-l border-border">Vendas</th>
-                  <th className="font-medium px-3 py-1.5 text-right">Líquido</th>
-                  <th className="font-medium px-3 py-1.5 text-right border-l border-border">Vendas</th>
-                  <th className="font-medium px-3 py-1.5 text-right">Comissão</th>
-                  <th className="font-medium px-5 py-1.5 text-right">Líquido</th>
+                  <th className="font-medium px-5 py-2">Canal</th>
+                  <th className="font-medium px-3 py-2">Grupo</th>
+                  <th className="font-medium px-3 py-2 text-right">Vendas</th>
+                  <th className="font-medium px-3 py-2 text-right">Bruto</th>
+                  <th className="font-medium px-5 py-2 text-right">Líquido</th>
                 </tr>
               </thead>
               <tbody>
-                {pessoas.map((v) => (
-                  <tr key={v.vendedor} className="border-b border-border last:border-0">
-                    <td className="px-5 py-2 text-fg">{v.vendedor}</td>
-                    <td className="px-3 py-2 text-right tnum text-fg-muted border-l border-border">{v.vendas_sck || '—'}</td>
-                    <td className="px-3 py-2 text-right tnum font-medium text-revenue">{v.vendas_sck ? fmtBRL(v.liquido_sck) : '—'}</td>
-                    <td className="px-3 py-2 text-right tnum text-fg-muted border-l border-border">{v.vendas_afiliado || '—'}</td>
-                    <td className="px-3 py-2 text-right tnum text-warning">{v.vendas_afiliado ? fmtBRL(v.comissao_afiliado) : '—'}</td>
-                    <td className="px-5 py-2 text-right tnum font-medium text-revenue">{v.vendas_afiliado ? fmtBRL(v.liquido_afiliado) : '—'}</td>
+                {canaisOrigem.map((c) => (
+                  <tr key={`${c.grupo}:${c.canal}`} className="border-b border-border last:border-0">
+                    <td className="px-5 py-2 text-fg">{c.canal}</td>
+                    <td className="px-3 py-2"><OrigemBadge origem={c.grupo} /></td>
+                    <td className="px-3 py-2 text-right tnum text-fg-muted">{c.vendas}</td>
+                    <td className="px-3 py-2 text-right tnum text-fg-muted">{fmtBRL(c.bruto)}</td>
+                    <td className="px-5 py-2 text-right tnum font-medium text-revenue">{fmtBRL(c.liquido)}</td>
                   </tr>
                 ))}
               </tbody>

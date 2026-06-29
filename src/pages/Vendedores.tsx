@@ -1,59 +1,40 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { supabase } from '../lib/supabase'
 import { fmtBRL } from '../lib/format'
 import type { Seller } from '../lib/types'
-import { Card, PageHeader, ErroBanner, KPICard, KPIStrip, inputCls, Button, Vazio } from '../components/ui'
+import { Card, PageHeader, ErroBanner, inputCls, Button, Vazio, Alert } from '../components/ui'
 
-// De-para sck → vendedor. O sck (purchase.tracking.source_sck) atribui a venda a
-// um vendedor DIRETO (não-afiliado). O valor é ruidoso: visitor-ids (`<ts>_<id>`)
-// e UTMs (`a|b|c`) se misturam aos códigos fixos de vendedor (ex.: raphaella_silva)
-// — o filtro "esconder ruído" usa o is_ruido vindo da RPC. Espelha ProdutosHotmart.
+// Vendedores (Fase 2): SÓ cadastro + relatório de vendas por vendedor. O MAPEAMENTO
+// (sck/afiliado → vendedor) virou parte do modelo de canais e é feito na tela /origem
+// (criar um Canal do grupo Comercial com seller_id e mapear os valores nele). O
+// relatório lê da RPC hotmart_seller_report (via channel_id → seller_id da view).
 
-interface SckRow {
-  sck: string
-  vendas: number
-  bruto: number
-  liquido: number
-  seller_id: string | null
-  is_ruido: boolean
-}
-
-// Afiliado (nome canônico da Hotmart) → mesmo vendedor (pessoa) do sck
-interface AfiRow {
-  affiliate: string
-  vendas: number
-  comissao: number
-  liquido: number
-  seller_id: string | null
+interface SellerReport {
+  vendedor: string; vendas: number; bruto: number; total: number; liquido: number; comissao_afiliado: number
 }
 
 export default function Vendedores() {
-  const [scks, setScks] = useState<SckRow[]>([])
-  const [afiliados, setAfiliados] = useState<AfiRow[]>([])
   const [sellers, setSellers] = useState<Seller[]>([])
+  const [relatorio, setRelatorio] = useState<SellerReport[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [novoNome, setNovoNome] = useState('')
-  const [salvandoSeller, setSalvandoSeller] = useState(false)
-  const [soNaoMapeados, setSoNaoMapeados] = useState(false)
-  const [esconderRuido, setEsconderRuido] = useState(false)
+  const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
     setErro(null)
-    const [r1, r2, r3] = await Promise.all([
-      supabase.rpc('hotmart_scks'),
+    const [r1, r2] = await Promise.all([
       supabase.from('sellers').select('*').order('name'),
-      supabase.rpc('hotmart_affiliates'),
+      supabase.rpc('hotmart_seller_report', { p_company: null, p_start: null, p_end: null }),
     ])
-    if (r1.error) setErro('Erro ao carregar os sck: ' + r1.error.message)
-    else setScks(((r1.data as SckRow[]) ?? []).map((s) => ({
-      ...s, vendas: Number(s.vendas), bruto: Number(s.bruto), liquido: Number(s.liquido),
-    })))
-    setSellers((r2.data as Seller[]) ?? [])
-    if (r3.error) setErro('Erro ao carregar os afiliados: ' + r3.error.message)
-    else setAfiliados(((r3.data as AfiRow[]) ?? []).map((a) => ({
-      ...a, vendas: Number(a.vendas), comissao: Number(a.comissao), liquido: Number(a.liquido),
+    if (r1.error) setErro('Erro ao carregar vendedores: ' + r1.error.message)
+    else setSellers((r1.data as Seller[]) ?? [])
+    if (r2.error) setErro('Erro ao carregar o relatório: ' + r2.error.message)
+    else setRelatorio(((r2.data as SellerReport[]) ?? []).map((v) => ({
+      vendedor: v.vendedor, vendas: Number(v.vendas), bruto: Number(v.bruto),
+      total: Number(v.total), liquido: Number(v.liquido), comissao_afiliado: Number(v.comissao_afiliado),
     })))
     setCarregando(false)
   }, [])
@@ -63,9 +44,9 @@ export default function Vendedores() {
   const addSeller = async () => {
     const nome = novoNome.trim()
     if (!nome) return
-    setSalvandoSeller(true)
+    setSalvando(true)
     const { error } = await supabase.from('sellers').insert({ name: nome })
-    setSalvandoSeller(false)
+    setSalvando(false)
     if (error) { setErro('Erro ao cadastrar vendedor: ' + error.message); return }
     setNovoNome('')
     carregar()
@@ -77,54 +58,11 @@ export default function Vendedores() {
     setSellers((prev) => prev.map((x) => (x.id === s.id ? { ...x, active: !x.active } : x)))
   }
 
-  // upsert por sck (mesma estratégia do setProduto em ProdutosHotmart)
-  const setVendedor = async (sck: string, sellerId: string | null) => {
-    setScks((prev) => prev.map((r) => (r.sck === sck ? { ...r, seller_id: sellerId } : r)))
-    const { error } = await supabase
-      .from('hotmart_sck_map')
-      .upsert({ sck, seller_id: sellerId, updated_at: new Date().toISOString() }, { onConflict: 'sck' })
-    if (error) { setErro('Erro ao salvar o mapeamento: ' + error.message); carregar() }
-  }
-
-  const setAfiliadoVendedor = async (affiliate: string, sellerId: string | null) => {
-    setAfiliados((prev) => prev.map((r) => (r.affiliate === affiliate ? { ...r, seller_id: sellerId } : r)))
-    const { error } = await supabase
-      .from('hotmart_affiliate_map')
-      .upsert({ affiliate, seller_id: sellerId, updated_at: new Date().toISOString() }, { onConflict: 'affiliate' })
-    if (error) { setErro('Erro ao salvar o afiliado: ' + error.message); carregar() }
-  }
-
-  // KPIs sobre os CANDIDATOS (sem ruído) — onde mora o trabalho real
-  const resumo = useMemo(() => {
-    const cand = scks.filter((r) => !r.is_ruido)
-    const naoMap = cand.filter((r) => !r.seller_id)
-    return {
-      candidatos: cand.length,
-      mapeados: cand.length - naoMap.length,
-      aMapear: naoMap.length,
-      liquidoAMapear: naoMap.reduce((s, r) => s + r.liquido, 0),
-    }
-  }, [scks])
-
-  // nº de sck mapeados por vendedor (badge no cadastro)
-  const porVendedor = useMemo(() => {
-    const m = new Map<string, number>()
-    scks.forEach((r) => { if (r.seller_id) m.set(r.seller_id, (m.get(r.seller_id) ?? 0) + 1) })
-    return m
-  }, [scks])
-
-  const exibidos = useMemo(() => {
-    let l = scks
-    if (esconderRuido) l = l.filter((r) => !r.is_ruido)
-    if (soNaoMapeados) l = l.filter((r) => !r.seller_id)
-    return l
-  }, [scks, esconderRuido, soNaoMapeados])
-
   return (
     <div className="space-y-6">
       <PageHeader
         titulo="Vendedores"
-        subtitulo="Cadastre vendedores e associe cada código de tracking (sck) do checkout ao vendedor — atribui as vendas diretas, não-afiliadas"
+        subtitulo="Cadastre os vendedores e acompanhe as vendas atribuídas a cada um. O vínculo de cada sck/afiliado ao vendedor é feito na tela Origem."
       />
 
       <ErroBanner mensagem={erro} />
@@ -142,7 +80,7 @@ export default function Vendedores() {
               onKeyDown={(e) => { if (e.key === 'Enter') addSeller() }}
             />
           </div>
-          <Button onClick={addSeller} loading={salvandoSeller} disabled={!novoNome.trim()}>Adicionar</Button>
+          <Button onClick={addSeller} loading={salvando} disabled={!novoNome.trim()}>Adicionar</Button>
         </div>
         {sellers.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -152,7 +90,6 @@ export default function Vendedores() {
                 className={`inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm ${s.active ? 'text-fg' : 'text-fg-subtle line-through'}`}
               >
                 {s.name}
-                <span className="text-xs text-fg-subtle tnum">{porVendedor.get(s.id) ?? 0} sck</span>
                 <button
                   onClick={() => toggleSeller(s)}
                   className="text-xs text-fg-subtle hover:text-fg-muted"
@@ -166,119 +103,41 @@ export default function Vendedores() {
         )}
       </Card>
 
-      {/* KPIs (sobre os candidatos, sem ruído) */}
-      <KPIStrip cols={4}>
-        <KPICard bare label="Códigos (sem ruído)" valor={resumo.candidatos} />
-        <KPICard bare label="Mapeados" valor={resumo.mapeados} tom="revenue" />
-        <KPICard bare label="A mapear" valor={resumo.aMapear} tom={resumo.aMapear > 0 ? 'warning' : 'revenue'} />
-        <KPICard bare label="Líquido a mapear" valor={fmtBRL(resumo.liquidoAMapear)} tom={resumo.aMapear > 0 ? 'warning' : 'neutro'} />
-      </KPIStrip>
+      <Alert tom="info">
+        Para atribuir vendas a um vendedor, vá em <Link to="/origem" className="text-brand font-medium hover:underline">Origem</Link>:
+        crie (ou edite) um Canal do grupo <strong>Comercial</strong> vinculado ao vendedor e mapeie nele os valores de <span className="text-fg-muted">sck</span>/<span className="text-fg-muted">afiliado</span> dele.
+      </Alert>
 
-      {/* de-para sck → vendedor */}
+      {/* relatório de vendas por vendedor */}
       <Card>
-        <div className="flex items-center justify-between gap-3 p-3 border-b border-border flex-wrap">
-          <p className="text-sm text-fg-muted">{exibidos.length} código{exibidos.length !== 1 ? 's' : ''} de sck</p>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm text-fg-muted cursor-pointer">
-              <input type="checkbox" className="accent-brand" checked={esconderRuido} onChange={(e) => setEsconderRuido(e.target.checked)} />
-              Esconder ruído (visitor-id/UTM)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-fg-muted cursor-pointer">
-              <input type="checkbox" className="accent-brand" checked={soNaoMapeados} onChange={(e) => setSoNaoMapeados(e.target.checked)} />
-              Só os a mapear
-            </label>
-          </div>
+        <div className="px-5 pt-5 pb-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-fg">Vendas por vendedor</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">Vendas atribuídas a cada vendedor pelos canais Comercial vinculados a ele (BRL · aprovadas). Inclui sck, afiliado e reclassificações manuais.</p>
         </div>
-
         {carregando ? (
           <Vazio mensagem="Carregando…" />
-        ) : exibidos.length === 0 ? (
-          <Vazio mensagem="Nenhum código de sck. As vendas com tracking aparecem aqui conforme o sync preenche o histórico." />
+        ) : relatorio.length === 0 ? (
+          <Vazio mensagem="Nenhuma venda atribuída ainda. Vincule os canais Comercial aos vendedores na tela Origem." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm tnum">
               <thead>
                 <tr className="border-b border-border text-xs text-fg-subtle uppercase tracking-wide">
-                  <th className="text-left px-4 h-10 font-medium">Código (sck)</th>
+                  <th className="text-left px-4 h-10 font-medium">Vendedor</th>
                   <th className="text-right px-4 h-10 font-medium">Vendas</th>
+                  <th className="text-right px-4 h-10 font-medium">Bruto</th>
+                  <th className="text-right px-4 h-10 font-medium">Comissão afiliado</th>
                   <th className="text-right px-4 h-10 font-medium">Líquido</th>
-                  <th className="text-left px-4 h-10 font-medium w-64">Vendedor</th>
                 </tr>
               </thead>
               <tbody>
-                {exibidos.map((r) => (
-                  <tr
-                    key={r.sck}
-                    className={`border-b border-border last:border-0 hover:bg-surface-2 ${!r.seller_id && !r.is_ruido ? 'bg-warning-bg/40' : ''}`}
-                  >
-                    <td className="px-4 py-2 text-fg">
-                      <span className="break-all">{r.sck}</span>
-                      {r.is_ruido && <span className="ml-2 text-[10px] text-fg-subtle uppercase tracking-wide">ruído</span>}
-                    </td>
-                    <td className="px-4 py-2 text-right text-fg-muted">{r.vendas}</td>
-                    <td className="px-4 py-2 text-right font-medium text-fg">{fmtBRL(r.liquido)}</td>
-                    <td className="px-4 py-2">
-                      <select
-                        className={inputCls + (!r.seller_id && !r.is_ruido ? ' border-warning' : '')}
-                        value={r.seller_id ?? ''}
-                        onChange={(e) => setVendedor(r.sck, e.target.value || null)}
-                      >
-                        <option value="">— sem vendedor —</option>
-                        {sellers.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* de-para afiliado → vendedor (mesma pessoa do sck) */}
-      <Card>
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm font-medium text-fg">Afiliados → vendedor <span className="text-fg-subtle font-normal">({afiliados.length})</span></p>
-          <p className="text-xs text-fg-subtle mt-0.5">Mesma pessoa do sck — o nome vem da Hotmart (canônico). Mapeie pra unificar o total por pessoa nos dois canais.</p>
-        </div>
-        {afiliados.length === 0 ? (
-          <Vazio mensagem="Nenhum afiliado nas vendas. Os afiliados aparecem conforme o sync de comissões preenche." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm tnum">
-              <thead>
-                <tr className="border-b border-border text-xs text-fg-subtle uppercase tracking-wide">
-                  <th className="text-left px-4 h-10 font-medium">Afiliado</th>
-                  <th className="text-right px-4 h-10 font-medium">Vendas</th>
-                  <th className="text-right px-4 h-10 font-medium">Comissão</th>
-                  <th className="text-right px-4 h-10 font-medium">Líquido</th>
-                  <th className="text-left px-4 h-10 font-medium w-64">Vendedor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {afiliados.map((r) => (
-                  <tr
-                    key={r.affiliate}
-                    className={`border-b border-border last:border-0 hover:bg-surface-2 ${!r.seller_id ? 'bg-warning-bg/40' : ''}`}
-                  >
-                    <td className="px-4 py-2 text-fg"><span className="break-all">{r.affiliate}</span></td>
-                    <td className="px-4 py-2 text-right text-fg-muted">{r.vendas}</td>
-                    <td className="px-4 py-2 text-right text-warning">{fmtBRL(r.comissao)}</td>
-                    <td className="px-4 py-2 text-right font-medium text-fg">{fmtBRL(r.liquido)}</td>
-                    <td className="px-4 py-2">
-                      <select
-                        className={inputCls + (!r.seller_id ? ' border-warning' : '')}
-                        value={r.seller_id ?? ''}
-                        onChange={(e) => setAfiliadoVendedor(r.affiliate, e.target.value || null)}
-                      >
-                        <option value="">— sem vendedor —</option>
-                        {sellers.map((s) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </td>
+                {relatorio.map((v) => (
+                  <tr key={v.vendedor} className="border-b border-border last:border-0 hover:bg-surface-2">
+                    <td className="px-4 py-2 text-fg">{v.vendedor}</td>
+                    <td className="px-4 py-2 text-right text-fg-muted">{v.vendas}</td>
+                    <td className="px-4 py-2 text-right text-fg-muted">{fmtBRL(v.bruto)}</td>
+                    <td className="px-4 py-2 text-right text-warning">{v.comissao_afiliado ? fmtBRL(v.comissao_afiliado) : '—'}</td>
+                    <td className="px-4 py-2 text-right font-medium text-revenue">{fmtBRL(v.liquido)}</td>
                   </tr>
                 ))}
               </tbody>
