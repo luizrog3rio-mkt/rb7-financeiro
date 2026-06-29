@@ -134,7 +134,11 @@ export default function Origem() {
       setRegras((prev) => prev.map((r) => r.id === modalRegra.id ? data as Regra : r))
     }
     setModalRegra(null); setSalvando(false)
-    await supabase.rpc('apply_origin_rules')
+    if (modalRegra.modo === 'editar') {
+      await supabase.rpc('force_apply_origin_rule', { p_rule_id: modalRegra.id })
+    } else {
+      await supabase.rpc('apply_origin_rules')
+    }
     carregar()
   }, [novaRegra, modalRegra, carregar])
 
