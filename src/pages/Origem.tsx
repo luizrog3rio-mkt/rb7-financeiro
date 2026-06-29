@@ -2,55 +2,32 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fmtBRL, fmtData } from '../lib/format'
 import type { HotmartSale } from '../lib/types'
-import { Card, PageHeader, ErroBanner, KPICard, Vazio, Modal, Button, inputCls } from '../components/ui'
+import { Card, PageHeader, ErroBanner, KPICard, Vazio } from '../components/ui'
 import { useRealtimeRefetch } from '../hooks/useRealtimeRefetch'
 
-// Origem das vendas — classificação POR VENDA (modelo origem v3) + regras persistentes de propagação.
+// Origem das vendas — VISÃO read-only das vendas classificadas. A classificação é
+// feita pelas regras de propagação na tela /regras (agrupadas por vendedor).
 
 interface Grupo { id: string; nome: string }
 interface SellerLite { id: string; name: string }
 interface GrupoTotal { grupo: string; vendas: number; liquido: number }
-type MatchType = 'exact' | 'contains' | 'starts_with' | 'is_empty'
-interface Regra { id: string; src_value: string | null; src_match: MatchType; sck_value: string | null; sck_match: MatchType; xcode_value: string | null; xcode_match: MatchType; afiliado_value: string | null; afiliado_match: MatchType; group_id: string | null; channel_id: string | null; seller_id: string | null }
-interface NovaRegra { src_value: string; src_match: MatchType; sck_value: string; sck_match: MatchType; xcode_value: string; xcode_match: MatchType; afiliado_value: string; afiliado_match: MatchType; group_id: string; channel_id: string; seller_id: string }
 type Filtro = 'a_classificar' | 'classificadas' | 'todas'
-
-const MATCH_LABELS: Record<MatchType, string> = { exact: '=', contains: 'contém', starts_with: 'começa com', is_empty: 'é vazio' }
-const REGRA_VAZIA: NovaRegra = { src_value: '', src_match: 'exact', sck_value: '', sck_match: 'exact', xcode_value: '', xcode_match: 'exact', afiliado_value: '', afiliado_match: 'exact', group_id: '', channel_id: '', seller_id: '' }
-const NOVO = '__novo__'
 
 export default function Origem() {
   const [grupos, setGrupos] = useState<Grupo[]>([])
   const [sellers, setSellers] = useState<SellerLite[]>([])
   const [vendas, setVendas] = useState<HotmartSale[]>([])
   const [totais, setTotais] = useState<GrupoTotal[]>([])
-  const [regras, setRegras] = useState<Regra[]>([])
   const [filtro, setFiltro] = useState<Filtro>('a_classificar')
   const [busca, setBusca] = useState('')
   const [buscaDebounced, setBuscaDebounced] = useState('')
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
 
-  const [salvando, setSalvando] = useState(false)
-
-  // modal criar grupo/canal (a partir do modal de regra)
-  const [modalCriar, setModalCriar] = useState<{ tipo: 'grupo' | 'canal' } | null>(null)
-  const [nomeNovo, setNomeNovo] = useState('')
-
-  // modal criar/editar regra
-  const [modalRegra, setModalRegra] = useState<{ modo: 'criar' } | { modo: 'editar'; id: string } | null>(null)
-  const [novaRegra, setNovaRegra] = useState<NovaRegra>(REGRA_VAZIA)
-  const [aplicando, setAplicando] = useState(false)
-
   useEffect(() => {
     const t = setTimeout(() => setBuscaDebounced(busca), 400)
     return () => clearTimeout(t)
   }, [busca])
-
-  const carregarKpis = useCallback(async () => {
-    const { data } = await supabase.rpc('hotmart_by_group', { p_company: null, p_start: null, p_end: null })
-    setTotais(((data as GrupoTotal[]) ?? []).map((g) => ({ grupo: g.grupo, vendas: Number(g.vendas), liquido: Number(g.liquido) })))
-  }, [])
 
   const carregar = useCallback(async () => {
     setErro(null)
@@ -61,96 +38,30 @@ export default function Origem() {
       const q = buscaDebounced.trim()
       vendasQ = vendasQ.or(`product.ilike.%${q}%,src.ilike.%${q}%,sck.ilike.%${q}%,xcod.ilike.%${q}%,affiliate.ilike.%${q}%,origem.ilike.%${q}%,vendedor.ilike.%${q}%`)
     }
-    const [r1, r2, r3, r4, r5] = await Promise.all([
+    const [r1, r2, r3, r4] = await Promise.all([
       supabase.from('origin_groups').select('id,nome').order('nome'),
-      supabase.from('sellers').select('id,name').eq('active', true).order('name'),
+      supabase.from('sellers').select('id,name').order('name'),
       vendasQ,
       supabase.rpc('hotmart_by_group', { p_company: null, p_start: null, p_end: null }),
-      supabase.from('origin_tracking_rules').select('*').order('created_at'),
     ])
     if (r1.error) setErro('Erro ao carregar grupos: ' + r1.error.message); else setGrupos((r1.data as Grupo[]) ?? [])
     if (!r2.error) setSellers((r2.data as SellerLite[]) ?? [])
     if (r3.error) setErro('Erro ao carregar vendas: ' + r3.error.message); else setVendas((r3.data as HotmartSale[]) ?? [])
     if (!r4.error) setTotais(((r4.data as GrupoTotal[]) ?? []).map((g) => ({ grupo: g.grupo, vendas: Number(g.vendas), liquido: Number(g.liquido) })))
-    if (!r5.error) setRegras((r5.data as Regra[]) ?? [])
     setCarregando(false)
   }, [filtro, buscaDebounced])
 
   useEffect(() => { carregar() }, [carregar])
   useRealtimeRefetch('hotmart_sales', carregar)
 
-  const abrirModalRegra = useCallback(() => {
-    setNovaRegra(REGRA_VAZIA)
-    setModalRegra({ modo: 'criar' })
-  }, [])
-
-  const editarRegra = useCallback((r: Regra) => {
-    setNovaRegra({ src_value: r.src_value ?? '', src_match: r.src_match, sck_value: r.sck_value ?? '', sck_match: r.sck_match, xcode_value: r.xcode_value ?? '', xcode_match: r.xcode_match, afiliado_value: r.afiliado_value ?? '', afiliado_match: r.afiliado_match, group_id: r.group_id ?? '', channel_id: r.channel_id ?? '', seller_id: r.seller_id ?? '' })
-    setModalRegra({ modo: 'editar', id: r.id })
-  }, [])
-
-  const regraValida = (r: NovaRegra) =>
-    r.src_match === 'is_empty' || r.src_value.trim() ||
-    r.sck_match === 'is_empty' || r.sck_value.trim() ||
-    r.xcode_match === 'is_empty' || r.xcode_value.trim() ||
-    r.afiliado_match === 'is_empty' || r.afiliado_value.trim()
-
-  const salvarRegra = useCallback(async () => {
-    if (!regraValida(novaRegra) || !modalRegra) return
-    setSalvando(true)
-    const payload = { src_value: novaRegra.src_value.trim() || null, src_match: novaRegra.src_match, sck_value: novaRegra.sck_value.trim() || null, sck_match: novaRegra.sck_match, xcode_value: novaRegra.xcode_value.trim() || null, xcode_match: novaRegra.xcode_match, afiliado_value: novaRegra.afiliado_value.trim() || null, afiliado_match: novaRegra.afiliado_match, group_id: novaRegra.group_id || null, channel_id: novaRegra.channel_id || null, seller_id: novaRegra.seller_id || null }
-    if (modalRegra.modo === 'criar') {
-      const { data, error } = await supabase.from('origin_tracking_rules').insert(payload).select('*').single()
-      if (error) { setErro('Erro ao salvar regra: ' + error.message); setSalvando(false); return }
-      setRegras((prev) => [...prev, data as Regra])
-    } else {
-      const { data, error } = await supabase.from('origin_tracking_rules').update(payload).eq('id', modalRegra.id).select('*').single()
-      if (error) { setErro('Erro ao editar regra: ' + error.message); setSalvando(false); return }
-      setRegras((prev) => prev.map((r) => r.id === modalRegra.id ? data as Regra : r))
-    }
-    setModalRegra(null); setSalvando(false)
-    if (modalRegra.modo === 'editar') {
-      await supabase.rpc('force_apply_origin_rule', { p_rule_id: modalRegra.id })
-    } else {
-      await supabase.rpc('apply_origin_rules')
-    }
-    carregar()
-  }, [novaRegra, modalRegra, carregar])
-
-  const excluirRegra = useCallback(async (id: string) => {
-    const { error } = await supabase.from('origin_tracking_rules').delete().eq('id', id)
-    if (error) { setErro('Erro ao excluir regra: ' + error.message); return }
-    setRegras((prev) => prev.filter((r) => r.id !== id))
-  }, [])
-
-  const aplicarRegras = useCallback(async () => {
-    setAplicando(true)
-    const { data, error } = await supabase.rpc('apply_origin_rules')
-    if (error) setErro('Erro ao aplicar regras: ' + error.message)
-    else if (Number(data) > 0) setErro(null)
-    setAplicando(false)
-    carregar()
-  }, [carregar])
-
-  const confirmarCriacao = useCallback(async () => {
-    if (!modalCriar || !nomeNovo.trim()) return
-    setSalvando(true)
-    const { data, error } = await supabase.from('origin_groups').insert({ nome: nomeNovo.trim() }).select('id,nome').single()
-    if (error) { setErro('Erro ao criar grupo: ' + error.message); setSalvando(false); return }
-    const g = data as Grupo
-    setGrupos((prev) => [...prev, g].sort((a, b) => a.nome.localeCompare(b.nome)))
-    setNovaRegra((p) => ({ ...p, group_id: g.id }))
-    setSalvando(false); setModalCriar(null); setNomeNovo('')
-  }, [modalCriar, nomeNovo])
-
-  const nomeGrupo = (id: string | null) => grupos.find((g) => g.id === id)?.nome ?? '—'
-  const nomeSeller = (id: string | null) => sellers.find((s) => s.id === id)?.name ?? '—'
+  const nomeGrupo = (id: string | null | undefined) => grupos.find((g) => g.id === id)?.nome ?? '—'
+  const nomeSeller = (id: string | null | undefined) => sellers.find((s) => s.id === id)?.name ?? '—'
 
   return (
     <div className="space-y-6">
       <PageHeader
         titulo="Origem das vendas"
-        subtitulo="Vendas classificadas pelas regras de propagação abaixo. Crie ou edite uma regra para classificar novas vendas."
+        subtitulo="Visão das vendas classificadas. A classificação automática é definida nas Regras de propagação."
       />
 
       <ErroBanner mensagem={erro} />
@@ -168,63 +79,6 @@ export default function Origem() {
           ))}
         </div>
       )}
-
-      {/* Card de regras de propagação */}
-      <Card>
-        <div className="px-5 pt-5 pb-3 border-b border-border flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold text-fg">Regras de propagação</h2>
-            <p className="text-xs text-fg-subtle mt-0.5">Defina regras por src / sck / xcode para classificar vendas automaticamente.</p>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <Button variante="secondary" onClick={aplicarRegras} loading={aplicando} disabled={regras.length === 0}>Aplicar agora</Button>
-            <Button variante="primary" onClick={abrirModalRegra}>+ Adicionar</Button>
-          </div>
-        </div>
-        {regras.length === 0 ? (
-          <Vazio mensagem="Nenhuma regra cadastrada. Adicione uma regra para propagar classificações automaticamente." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="border-b border-border text-xs text-fg-subtle uppercase tracking-wide">
-                  <th className="text-left px-4 h-9 font-medium">Condições (AND)</th>
-                  <th className="text-left px-4 h-9 font-medium">Grupo</th>
-                  <th className="text-left px-4 h-9 font-medium">Vendedor</th>
-                  <th className="px-4 h-9" />
-                </tr>
-              </thead>
-              <tbody>
-                {regras.map((r) => {
-                  const conds = [
-                    r.src_value      && `src ${MATCH_LABELS[r.src_match]} ${r.src_value}`,
-                    r.sck_value      && `sck ${MATCH_LABELS[r.sck_match]} ${r.sck_value}`,
-                    r.xcode_value    && `xcode ${MATCH_LABELS[r.xcode_match]} ${r.xcode_value}`,
-                    r.afiliado_value && `afiliado ${MATCH_LABELS[r.afiliado_match]} ${r.afiliado_value}`,
-                  ].filter(Boolean)
-                  return (
-                  <tr key={r.id} className="border-b border-border last:border-0 hover:bg-surface-2">
-                    <td className="px-4 py-2 font-mono text-fg max-w-[320px]">
-                      <div className="flex flex-wrap gap-1">
-                        {conds.map((c) => <span key={c as string} className="bg-surface-2 border border-border rounded px-1.5 py-0.5 text-[10px] text-fg-muted">{c}</span>)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-fg-muted">{nomeGrupo(r.group_id)}</td>
-                    <td className="px-4 py-2 text-fg-muted">{nomeSeller(r.seller_id)}</td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex justify-end gap-3">
-                        <button onClick={() => editarRegra(r)} className="text-brand hover:text-brand/70 text-xs transition">Editar</button>
-                        <button onClick={() => excluirRegra(r.id)} className="text-expense hover:text-expense/70 text-xs transition">Excluir</button>
-                      </div>
-                    </td>
-                  </tr>
-                )})}
-
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
 
       {/* Card de vendas */}
       <Card>
@@ -244,17 +98,17 @@ export default function Origem() {
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
-          <div className="flex gap-1 shrink-0">
-            {(['a_classificar', 'classificadas', 'todas'] as Filtro[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFiltro(f)}
-                className={`px-3 py-1 rounded-control text-xs font-medium transition ${filtro === f ? 'bg-brand text-white' : 'bg-surface-2 text-fg-muted hover:bg-border'}`}
-              >
-                {f === 'a_classificar' ? 'A classificar' : f === 'classificadas' ? 'Classificadas' : 'Todas'}
-              </button>
-            ))}
-          </div>
+            <div className="flex gap-1 shrink-0">
+              {(['a_classificar', 'classificadas', 'todas'] as Filtro[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltro(f)}
+                  className={`px-3 py-1 rounded-control text-xs font-medium transition ${filtro === f ? 'bg-brand text-white' : 'bg-surface-2 text-fg-muted hover:bg-border'}`}
+                >
+                  {f === 'a_classificar' ? 'A classificar' : f === 'classificadas' ? 'Classificadas' : 'Todas'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {carregando ? (
@@ -296,102 +150,6 @@ export default function Origem() {
           </div>
         )}
       </Card>
-
-      {/* Modal criar/editar regra */}
-      {modalRegra && (
-        <Modal
-          titulo={modalRegra.modo === 'criar' ? 'Nova regra de propagação' : 'Editar regra'}
-          aberto={true}
-          onFechar={() => setModalRegra(null)}
-          largura="lg"
-          footer={
-            <div className="flex justify-end gap-2">
-              <Button variante="secondary" onClick={() => setModalRegra(null)}>Cancelar</Button>
-              <Button variante="primary" loading={salvando} disabled={!regraValida(novaRegra)} onClick={salvarRegra}>Salvar e aplicar</Button>
-            </div>
-          }
-        >
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs text-fg-muted mb-2">Preencha ao menos um campo. A regra casa com vendas onde <strong>todos</strong> os campos preenchidos coincidem.</p>
-              <div className="space-y-2">
-                {([['SRC', 'src_value', 'src_match', 'ex: FB'], ['SCK', 'sck_value', 'sck_match', 'ex: raphaella_silva'], ['XCODE', 'xcode_value', 'xcode_match', 'ex: AF2024'], ['Afiliado', 'afiliado_value', 'afiliado_match', 'ex: Raphaela Silva']] as const).map(([label, valKey, matchKey, ph]) => (
-                  <div key={valKey} className="flex items-center gap-2">
-                    <span className="w-14 shrink-0 text-xs text-fg-muted font-mono">{label}</span>
-                    <select
-                      className="shrink-0 rounded-control border border-border bg-surface px-2 py-1 text-xs text-fg focus:outline-none focus:ring-1 focus:ring-brand"
-                      value={novaRegra[matchKey]}
-                      onChange={(e) => setNovaRegra((p) => ({ ...p, [matchKey]: e.target.value as MatchType }))}
-                    >
-                      <option value="exact">= exato</option>
-                      <option value="contains">contém</option>
-                      <option value="starts_with">começa com</option>
-                      <option value="is_empty">é vazio</option>
-                    </select>
-                    {novaRegra[matchKey] !== 'is_empty' && (
-                      <input
-                        autoFocus={valKey === 'src_value'}
-                        className={inputCls + ' flex-1'}
-                        placeholder={ph}
-                        value={novaRegra[valKey]}
-                        onChange={(e) => setNovaRegra((p) => ({ ...p, [valKey]: e.target.value }))}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-fg-muted mb-1">Grupo</label>
-              <select
-                className={inputCls}
-                value={novaRegra.group_id}
-                onChange={(e) => e.target.value === NOVO ? (setNomeNovo(''), setModalCriar({ tipo: 'grupo' })) : setNovaRegra((p) => ({ ...p, group_id: e.target.value }))}
-              >
-                <option value="">— sem grupo —</option>
-                {grupos.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
-                <option value={NOVO}>+ Novo grupo...</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-fg-muted mb-1">Vendedor</label>
-              <select
-                className={inputCls}
-                value={novaRegra.seller_id}
-                onChange={(e) => setNovaRegra((p) => ({ ...p, seller_id: e.target.value }))}
-              >
-                <option value="">— sem vendedor —</option>
-                {sellers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Modal criar grupo — renderizado DEPOIS do modal de regra para ficar por cima (mesmo z-50) */}
-      {modalCriar && (
-        <Modal
-          titulo="Novo grupo"
-          aberto={true}
-          onFechar={() => setModalCriar(null)}
-          largura="lg"
-          footer={
-            <div className="flex justify-end gap-2">
-              <Button variante="secondary" onClick={() => setModalCriar(null)}>Cancelar</Button>
-              <Button variante="primary" loading={salvando} disabled={!nomeNovo.trim()} onClick={confirmarCriacao}>Criar</Button>
-            </div>
-          }
-        >
-          <input
-            autoFocus
-            className={inputCls}
-            placeholder="Nome do grupo"
-            value={nomeNovo}
-            onChange={(e) => setNomeNovo(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') confirmarCriacao() }}
-          />
-        </Modal>
-      )}
     </div>
   )
 }
