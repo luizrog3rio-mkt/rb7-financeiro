@@ -79,6 +79,7 @@ export default function Hotmart() {
   const [buscaDebounced, setBuscaDebounced] = useState('')
   const [filtroOrigem, setFiltroOrigem] = useState<FiltroOrigem>('todas')
   const [presenca, setPresenca] = useState<{ id: string; mode: 'has' | 'empty' }[]>([])
+  const [carregandoVendas, setCarregandoVendas] = useState(false)
   // classificar venda (abre o RegraModal pré-preenchido); listas pro modal
   const [classificar, setClassificar] = useState<HotmartSale | null>(null)
   const [grupos, setGrupos] = useState<{ id: string; nome: string }[]>([])
@@ -99,29 +100,50 @@ export default function Hotmart() {
     supabase.from('sellers').select('id,name').eq('active', true).order('name').then(({ data }) => setVendedores(data ?? []))
   }, [])
 
-  // Tabela de vendas: depende de empresa + período + filtro de origem + busca.
+  // Tabela de vendas: empresa + período + filtro de origem + busca + presença.
+  // SEM filtro: 1000 mais recentes. COM filtro: TODAS que casam (paginado por range,
+  // pra furar o teto de 1000 do PostgREST) — a virtualização aguenta renderizar.
   const carregarVendas = useCallback(async () => {
     const pStart: string | null = dataDe || null
     const pEnd: string | null = dataAte || null
-    // tabela: 1000 vendas mais recentes (teto do PostgREST)
-    let q = supabase.from('hotmart_sales_origin').select('*').order('sale_date', { ascending: false }).limit(1000)
-    if (empresaAtiva) q = q.eq('company_id', empresaAtiva.id)
-    if (pStart) q = q.gte('sale_date', pStart)
-    if (pEnd) q = q.lte('sale_date', pEnd)
-    if (filtroOrigem === 'a_classificar') q = q.eq('origem', 'a_classificar')
-    else if (filtroOrigem === 'classificadas') q = q.neq('origem', 'a_classificar')
-    if (buscaDebounced.trim()) {
-      const s = buscaDebounced.trim()
-      q = q.or(`product.ilike.%${s}%,src.ilike.%${s}%,sck.ilike.%${s}%,xcod.ilike.%${s}%,affiliate.ilike.%${s}%,origem.ilike.%${s}%,vendedor.ilike.%${s}%,transaction_code.ilike.%${s}%`)
+    const temFiltro = filtroOrigem !== 'todas' || !!buscaDebounced.trim() || presenca.length > 0
+    const build = () => {
+      let q = supabase.from('hotmart_sales_origin').select('*')
+        .order('sale_date', { ascending: false })
+        .order('transaction_code', { ascending: false }) // tiebreaker p/ paginação estável
+      if (empresaAtiva) q = q.eq('company_id', empresaAtiva.id)
+      if (pStart) q = q.gte('sale_date', pStart)
+      if (pEnd) q = q.lte('sale_date', pEnd)
+      if (filtroOrigem === 'a_classificar') q = q.eq('origem', 'a_classificar')
+      else if (filtroOrigem === 'classificadas') q = q.neq('origem', 'a_classificar')
+      if (buscaDebounced.trim()) {
+        const s = buscaDebounced.trim()
+        q = q.or(`product.ilike.%${s}%,src.ilike.%${s}%,sck.ilike.%${s}%,xcod.ilike.%${s}%,affiliate.ilike.%${s}%,origem.ilike.%${s}%,vendedor.ilike.%${s}%,transaction_code.ilike.%${s}%`)
+      }
+      for (const f of presenca) {
+        if (f.mode === 'has') q = q.not(f.id, 'is', null).neq(f.id, '')
+        else q = q.or(`${f.id}.is.null,${f.id}.eq.`)
+      }
+      return q
     }
-    // filtros de presença (server-side): "com valor" / "vazio" por coluna
-    for (const f of presenca) {
-      if (f.mode === 'has') q = q.not(f.id, 'is', null).neq(f.id, '')
-      else q = q.or(`${f.id}.is.null,${f.id}.eq.`)
+    setCarregandoVendas(true)
+    if (!temFiltro) {
+      const { data, error } = await build().limit(1000)
+      if (error) setErro('Erro ao carregar vendas: ' + error.message)
+      else setVendas((data as HotmartSale[]) ?? [])
+    } else {
+      const PAGE = 1000
+      const acc: HotmartSale[] = []
+      let ok = true
+      for (let from = 0; from < 50000; from += PAGE) { // teto de segurança
+        const { data, error } = await build().range(from, from + PAGE - 1)
+        if (error) { setErro('Erro ao carregar vendas: ' + error.message); ok = false; break }
+        acc.push(...((data as HotmartSale[]) ?? []))
+        if (!data || data.length < PAGE) break
+      }
+      if (ok) setVendas(acc)
     }
-    const { data, error } = await q
-    if (error) { setErro('Erro ao carregar vendas: ' + error.message); return }
-    setVendas((data as HotmartSale[]) ?? [])
+    setCarregandoVendas(false)
   }, [empresaAtiva, dataDe, dataAte, filtroOrigem, buscaDebounced, presenca])
 
   // KPIs e relatórios agregados: dependem só de empresa + período (não da busca/
@@ -338,7 +360,9 @@ export default function Hotmart() {
           <div>
             <h2 className="text-sm font-semibold text-fg">Vendas</h2>
             <p className="text-xs text-fg-subtle mt-0.5">
-              {vendas.length === 1000 ? 'Primeiras 1000' : vendas.length} {filtroOrigem === 'a_classificar' ? 'sem classificação' : filtroOrigem === 'classificadas' ? 'classificadas' : 'no período'}.
+              {carregandoVendas
+                ? 'Carregando…'
+                : `${vendas.length} ${filtroOrigem === 'a_classificar' ? 'sem classificação' : filtroOrigem === 'classificadas' ? 'classificadas' : (buscaDebounced.trim() || presenca.length > 0) ? 'no filtro' : vendas.length === 1000 ? 'mais recentes (de ' + totais.qtd + ')' : 'no período'}.`}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -373,9 +397,9 @@ export default function Hotmart() {
               virtualize
               onPresenceFiltersChange={setPresenca}
             />
-            {totais.qtd > vendas.length && filtroOrigem === 'todas' && !buscaDebounced.trim() && (
+            {filtroOrigem === 'todas' && !buscaDebounced.trim() && presenca.length === 0 && totais.qtd > vendas.length && (
               <p className="text-xs text-fg-subtle text-center py-3 border-t border-border">
-                Carregadas as {vendas.length} vendas mais recentes (de {totais.qtd} aprovadas no período). Os totais acima consideram todas. Refine pela busca ou pelo período.
+                Mostrando as {vendas.length} mais recentes (de {totais.qtd} no período). Filtre (A classificar, busca ou um funil de coluna) que aí traz TODAS as que casam.
               </p>
             )}
           </>

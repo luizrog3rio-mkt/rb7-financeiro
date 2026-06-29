@@ -72,7 +72,11 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `GRANT EXECUTE ... TO authenticated` explícito (default privileges foram
   revogados na Fase 1a). Extensões novas: `WITH SCHEMA extensions`.
 - **PostgREST limita respostas a 1000 linhas** — somas/agregações vão pro
-  banco (ex.: RPC `hotmart_totals`), nunca pro cliente.
+  banco (ex.: RPC `hotmart_totals`), nunca pro cliente. Pra LISTAR mais de 1000 quando
+  preciso, paginar por `.range(from, from+999)` em loop até a página vir incompleta
+  (ex.: `carregarVendas` do `/hotmart` quando há filtro ativo busca TODAS as que casam,
+  não só 1000 — com `.order` + tiebreaker `transaction_code` pra paginação estável, e a
+  virtualização do DataTable aguenta renderizar os milhares).
 
 ## Hotmart (integração viva)
 
