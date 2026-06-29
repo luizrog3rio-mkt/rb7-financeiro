@@ -56,7 +56,7 @@ export default function Origem() {
 
   const carregar = useCallback(async () => {
     setErro(null)
-    let vendasQ = supabase.from('hotmart_sales_origin').select('*').order('sale_date', { ascending: false }).limit(300)
+    let vendasQ = supabase.from('hotmart_sales_origin').select('*').order('sale_date', { ascending: false }).limit(1000)
     if (filtro === 'a_classificar') vendasQ = vendasQ.eq('origem', 'a_classificar')
     else if (filtro === 'classificadas') vendasQ = vendasQ.neq('origem', 'a_classificar')
     if (buscaDebounced.trim()) {
@@ -247,9 +247,9 @@ export default function Origem() {
           <div>
             <h2 className="text-sm font-semibold text-fg">Vendas</h2>
             <p className="text-xs text-fg-subtle mt-0.5">
-              {filtro === 'a_classificar' && 'Até 300 sem classificação.'}
-              {filtro === 'classificadas' && 'Até 300 já classificadas.'}
-              {filtro === 'todas' && 'Até 300 mais recentes.'}
+              {filtro === 'a_classificar' && `${vendas.length === 1000 ? 'Primeiras 1000' : vendas.length} sem classificação.`}
+              {filtro === 'classificadas' && `${vendas.length === 1000 ? 'Primeiras 1000' : vendas.length} já classificadas.`}
+              {filtro === 'todas' && `${vendas.length === 1000 ? 'Primeiras 1000' : vendas.length} mais recentes.`}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
