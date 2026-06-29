@@ -161,10 +161,17 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   venda. Cada regra = **condições AND opcionais por campo** (`src`/`sck`/`xcode`/`afiliado`), cada campo
   com um **tipo de match** (`exact`/`contains`/`starts_with`/`is_empty`) + um **destino**
   (`group_id`, `seller_id`). A regra casa quando TODOS os campos preenchidos coincidem; mais condições
-  preenchidas = mais específica = vence (precedência por contagem). As RPCs aplicam o destino em
-  **`hotmart_sale_class`** (`transaction_code → group_id/channel_id/seller_id`): `apply_origin_rules()`
-  (só classifica vendas AINDA sem grupo — não sobrescreve) e `force_apply_origin_rule(uuid)` (re-aplica
-  UMA regra a TODAS as vendas que casam — chamada ao salvar edição). **Grupo** (`origin_groups`) é
+  preenchidas = mais específica = vence. O destino vai pra **`hotmart_sale_class`**
+  (`transaction_code → group_id/seller_id` + proveniência `source` `manual`/`rule` e `applied_by_rule`).
+  **Motor blindado (Fase 5, migrations `origem_sale_class_proveniencia` `20260629214649` +
+  `origem_reapply_all` `20260629214724`):** a fonte da verdade é **`reapply_all()`** — recomputa o
+  universo do zero por **precedência determinística** (mais específica → mais antiga por `created_at`),
+  **preserva `source='manual'`** (regra NUNCA clobbera trabalho à mão) e **elimina fantasmas/órfãos**
+  (limpa as de regra e reinsere só o que casa hoje → **excluir regra devolve as vendas pro
+  `a_classificar`**). `apply_origin_rules()` e `force_apply_origin_rule(uuid)` viram **wrappers** que
+  chamam `reapply_all` (frontend chama os mesmos nomes; criar/editar/excluir regra dispara reapply
+  global; `excluirRegra` chama o reapply após o delete). Blast radius da transição medido = 0.
+  **Grupo** (`origin_groups`) é
   lista que o Luiz cria (inline pelo "+ Novo grupo..." do select); **Vendedor** = `sellers`. Migrations
   (todas APLICADAS, mesmo dia): `origem_rules_add_afiliado` (`20260629160459`),
   `origem_rules_multi_condition` (`20260629161019`, troca o par (field,value) por 4 colunas
@@ -180,6 +187,15 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
     se alguma regra do grupo tem `seller_id`. Botão **"+ Novo grupo"** (cria aba) e **"Aplicar agora"**
     (`apply_origin_rules`). Criar grupo pelo modal (renderizado DEPOIS do modal de regra pra ficar por
     cima — ambos `z-50`). Sellers carregados só com `active=true`.
+  - **Tela `/classificar`** ("Classificar origens", grupo Receitas & Vendas, ícone `ListChecks`) —
+    fluxo de mapeamento ORIENTADO A VALORES, não a linhas (insight da auditoria 2026-06-29: a tarefa é
+    classificar ~167 src distintos por volume, não percorrer ~14k vendas). Consome a RPC read-only
+    **`origin_unmapped_values(p_field, p_company, p_currency)`** (`20260629213111`, GROUP BY
+    src|sck|afiliado entre as a_classificar do universo aprovado+BRL — mesmo dos KPIs — devolve valor
+    distinto + contagem por volume, SEM baixar linhas). Abas src/sck/afiliado, lista por volume com
+    barra de proporção; "Criar regra" abre o RegraModal compartilhado pré-preenchido com o valor; salvar
+    → reapply → o valor cai da lista. Cauda longa (valores de 1 venda = ruído visitor-id) sinalizada.
+    Substitui o mapeamento por-linha que vivia na `/hotmart` (esta voltando a ser financeira leve).
     - **Rafa Brito tirado do rol de vendedores** (2026-06-29, é o dono da empresa, não vendedor): UPDATE
       não-destrutivo `seller_id=null` nas 12 regras de marketing dele E nas ~9,4 mil vendas em
       `hotmart_sale_class` (o **grupo** Orgânico/Tráfego/Sem Grupo permanece — só perde a pessoa) +

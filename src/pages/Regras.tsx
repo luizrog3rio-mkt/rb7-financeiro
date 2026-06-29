@@ -83,7 +83,10 @@ export default function Regras() {
   const excluirRegra = async (id: string) => {
     const { error } = await supabase.from('origin_tracking_rules').delete().eq('id', id)
     if (error) { setErro('Erro ao excluir regra: ' + error.message); return }
-    setRegras((prev) => prev.filter((r) => r.id !== id))
+    // reapply_all devolve pro "a classificar" as vendas que só essa regra classificava
+    // (ou as re-atribui a outra regra que case). Sem isso ficariam órfãs no grupo errado.
+    await supabase.rpc('apply_origin_rules')
+    carregar()
   }
 
   const aplicarRegras = useCallback(async () => {
@@ -119,7 +122,7 @@ export default function Regras() {
 
       <ErroBanner mensagem={erro} />
       {resultado !== null && (
-        <Alert tom="success">{resultado > 0 ? `${resultado} venda(s) classificada(s).` : 'Nenhuma venda nova classificada (todas já estavam classificadas).'}</Alert>
+        <Alert tom="success">{resultado > 0 ? `${resultado} venda(s) classificada(s) no total pelas regras.` : 'Nenhuma venda classificada — crie regras que casem as vendas.'}</Alert>
       )}
 
       <div className="flex justify-end">
