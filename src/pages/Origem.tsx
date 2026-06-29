@@ -8,7 +8,6 @@ import { useRealtimeRefetch } from '../hooks/useRealtimeRefetch'
 // Origem das vendas — classificação POR VENDA (modelo origem v3) + regras persistentes de propagação.
 
 interface Grupo { id: string; nome: string }
-interface Canal { id: string; nome: string; group_id: string }
 interface SellerLite { id: string; name: string }
 interface GrupoTotal { grupo: string; vendas: number; liquido: number }
 type MatchType = 'exact' | 'contains' | 'starts_with' | 'is_empty'
@@ -22,7 +21,6 @@ const NOVO = '__novo__'
 
 export default function Origem() {
   const [grupos, setGrupos] = useState<Grupo[]>([])
-  const [canais, setCanais] = useState<Canal[]>([])
   const [sellers, setSellers] = useState<SellerLite[]>([])
   const [vendas, setVendas] = useState<HotmartSale[]>([])
   const [totais, setTotais] = useState<GrupoTotal[]>([])
@@ -61,22 +59,20 @@ export default function Origem() {
     else if (filtro === 'classificadas') vendasQ = vendasQ.neq('origem', 'a_classificar')
     if (buscaDebounced.trim()) {
       const q = buscaDebounced.trim()
-      vendasQ = vendasQ.or(`product.ilike.%${q}%,src.ilike.%${q}%,sck.ilike.%${q}%,xcod.ilike.%${q}%,affiliate.ilike.%${q}%,origem.ilike.%${q}%,canal.ilike.%${q}%,vendedor.ilike.%${q}%`)
+      vendasQ = vendasQ.or(`product.ilike.%${q}%,src.ilike.%${q}%,sck.ilike.%${q}%,xcod.ilike.%${q}%,affiliate.ilike.%${q}%,origem.ilike.%${q}%,vendedor.ilike.%${q}%`)
     }
-    const [r1, r2, r3, r4, r5, r6] = await Promise.all([
+    const [r1, r2, r3, r4, r5] = await Promise.all([
       supabase.from('origin_groups').select('id,nome').order('nome'),
-      supabase.from('origin_channels').select('id,nome,group_id').order('nome'),
       supabase.from('sellers').select('id,name').eq('active', true).order('name'),
       vendasQ,
       supabase.rpc('hotmart_by_group', { p_company: null, p_start: null, p_end: null }),
       supabase.from('origin_tracking_rules').select('*').order('created_at'),
     ])
     if (r1.error) setErro('Erro ao carregar grupos: ' + r1.error.message); else setGrupos((r1.data as Grupo[]) ?? [])
-    if (r2.error) setErro('Erro ao carregar canais: ' + r2.error.message); else setCanais((r2.data as Canal[]) ?? [])
-    if (!r3.error) setSellers((r3.data as SellerLite[]) ?? [])
-    if (r4.error) setErro('Erro ao carregar vendas: ' + r4.error.message); else setVendas((r4.data as HotmartSale[]) ?? [])
-    if (!r5.error) setTotais(((r5.data as GrupoTotal[]) ?? []).map((g) => ({ grupo: g.grupo, vendas: Number(g.vendas), liquido: Number(g.liquido) })))
-    if (!r6.error) setRegras((r6.data as Regra[]) ?? [])
+    if (!r2.error) setSellers((r2.data as SellerLite[]) ?? [])
+    if (r3.error) setErro('Erro ao carregar vendas: ' + r3.error.message); else setVendas((r3.data as HotmartSale[]) ?? [])
+    if (!r4.error) setTotais(((r4.data as GrupoTotal[]) ?? []).map((g) => ({ grupo: g.grupo, vendas: Number(g.vendas), liquido: Number(g.liquido) })))
+    if (!r5.error) setRegras((r5.data as Regra[]) ?? [])
     setCarregando(false)
   }, [filtro, buscaDebounced])
 
@@ -139,24 +135,15 @@ export default function Origem() {
   const confirmarCriacao = useCallback(async () => {
     if (!modalCriar || !nomeNovo.trim()) return
     setSalvando(true)
-    if (modalCriar.tipo === 'grupo') {
-      const { data, error } = await supabase.from('origin_groups').insert({ nome: nomeNovo.trim() }).select('id,nome').single()
-      if (error) { setErro('Erro ao criar grupo: ' + error.message); setSalvando(false); return }
-      const g = data as Grupo
-      setGrupos((prev) => [...prev, g].sort((a, b) => a.nome.localeCompare(b.nome)))
-      setNovaRegra((p) => ({ ...p, group_id: g.id, channel_id: '' }))
-    } else {
-      const { data, error } = await supabase.from('origin_channels').insert({ nome: nomeNovo.trim(), group_id: novaRegra.group_id }).select('id,nome,group_id').single()
-      if (error) { setErro('Erro ao criar canal: ' + error.message); setSalvando(false); return }
-      const c = data as Canal
-      setCanais((prev) => [...prev, c].sort((a, b) => a.nome.localeCompare(b.nome)))
-      setNovaRegra((p) => ({ ...p, channel_id: c.id }))
-    }
+    const { data, error } = await supabase.from('origin_groups').insert({ nome: nomeNovo.trim() }).select('id,nome').single()
+    if (error) { setErro('Erro ao criar grupo: ' + error.message); setSalvando(false); return }
+    const g = data as Grupo
+    setGrupos((prev) => [...prev, g].sort((a, b) => a.nome.localeCompare(b.nome)))
+    setNovaRegra((p) => ({ ...p, group_id: g.id }))
     setSalvando(false); setModalCriar(null); setNomeNovo('')
-  }, [modalCriar, nomeNovo, novaRegra.group_id])
+  }, [modalCriar, nomeNovo])
 
   const nomeGrupo = (id: string | null) => grupos.find((g) => g.id === id)?.nome ?? '—'
-  const nomeCanal = (id: string | null) => canais.find((c) => c.id === id)?.nome ?? '—'
   const nomeSeller = (id: string | null) => sellers.find((s) => s.id === id)?.name ?? '—'
 
   return (
@@ -203,7 +190,6 @@ export default function Origem() {
                 <tr className="border-b border-border text-xs text-fg-subtle uppercase tracking-wide">
                   <th className="text-left px-4 h-9 font-medium">Condições (AND)</th>
                   <th className="text-left px-4 h-9 font-medium">Grupo</th>
-                  <th className="text-left px-4 h-9 font-medium">Canal</th>
                   <th className="text-left px-4 h-9 font-medium">Vendedor</th>
                   <th className="px-4 h-9" />
                 </tr>
@@ -224,7 +210,6 @@ export default function Origem() {
                       </div>
                     </td>
                     <td className="px-4 py-2 text-fg-muted">{nomeGrupo(r.group_id)}</td>
-                    <td className="px-4 py-2 text-fg-muted">{nomeCanal(r.channel_id)}</td>
                     <td className="px-4 py-2 text-fg-muted">{nomeSeller(r.seller_id)}</td>
                     <td className="px-4 py-2 text-right">
                       <div className="flex justify-end gap-3">
@@ -288,7 +273,6 @@ export default function Origem() {
                   <th className="text-left px-3 h-10 font-medium">xcode</th>
                   <th className="text-left px-3 h-10 font-medium">Afiliado</th>
                   <th className="text-left px-3 h-10 font-medium">Grupo</th>
-                  <th className="text-left px-3 h-10 font-medium">Canal</th>
                   <th className="text-left px-3 h-10 font-medium">Vendedor</th>
                   <th className="text-right px-3 h-10 font-medium">Líquido</th>
                 </tr>
@@ -303,7 +287,6 @@ export default function Origem() {
                     <td className="px-3 py-2 text-fg-subtle break-all max-w-[120px]">{v.xcod || '—'}</td>
                     <td className="px-3 py-2 text-fg-muted max-w-[140px] truncate" title={v.affiliate ?? ''}>{v.affiliate || '—'}</td>
                     <td className="px-3 py-2 text-fg-muted">{nomeGrupo(v.group_id)}</td>
-                    <td className="px-3 py-2 text-fg-muted">{nomeCanal(v.channel_id)}</td>
                     <td className="px-3 py-2 text-fg-muted">{nomeSeller(v.seller_id)}</td>
                     <td className="px-3 py-2 text-right font-medium text-revenue tnum whitespace-nowrap">{fmtBRL(Number(v.net_amount))}</td>
                   </tr>
@@ -363,24 +346,11 @@ export default function Origem() {
               <select
                 className={inputCls}
                 value={novaRegra.group_id}
-                onChange={(e) => e.target.value === NOVO ? (setNomeNovo(''), setModalCriar({ tipo: 'grupo' })) : setNovaRegra((p) => ({ ...p, group_id: e.target.value, channel_id: '' }))}
+                onChange={(e) => e.target.value === NOVO ? (setNomeNovo(''), setModalCriar({ tipo: 'grupo' })) : setNovaRegra((p) => ({ ...p, group_id: e.target.value }))}
               >
                 <option value="">— sem grupo —</option>
                 {grupos.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
                 <option value={NOVO}>+ Novo grupo...</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-fg-muted mb-1">Canal</label>
-              <select
-                className={inputCls}
-                value={novaRegra.channel_id}
-                disabled={!novaRegra.group_id}
-                onChange={(e) => e.target.value === NOVO ? (setNomeNovo(''), setModalCriar({ tipo: 'canal' })) : setNovaRegra((p) => ({ ...p, channel_id: e.target.value }))}
-              >
-                <option value="">{novaRegra.group_id ? '— sem canal —' : 'escolha o grupo primeiro'}</option>
-                {canais.filter((c) => c.group_id === novaRegra.group_id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                {novaRegra.group_id && <option value={NOVO}>+ Novo canal...</option>}
               </select>
             </div>
             <div>
@@ -398,10 +368,10 @@ export default function Origem() {
         </Modal>
       )}
 
-      {/* Modal criar grupo/canal — renderizado DEPOIS do modal de regra para ficar por cima (mesmo z-50) */}
+      {/* Modal criar grupo — renderizado DEPOIS do modal de regra para ficar por cima (mesmo z-50) */}
       {modalCriar && (
         <Modal
-          titulo={modalCriar.tipo === 'grupo' ? 'Novo grupo' : 'Novo canal'}
+          titulo="Novo grupo"
           aberto={true}
           onFechar={() => setModalCriar(null)}
           largura="lg"
@@ -415,7 +385,7 @@ export default function Origem() {
           <input
             autoFocus
             className={inputCls}
-            placeholder={modalCriar.tipo === 'grupo' ? 'Nome do grupo' : 'Nome do canal'}
+            placeholder="Nome do grupo"
             value={nomeNovo}
             onChange={(e) => setNomeNovo(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') confirmarCriacao() }}
