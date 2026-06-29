@@ -133,8 +133,13 @@ export interface HotmartSale {
   status: string
   buyer: string | null
   sck: string | null            // purchase.tracking.source_sck (vendedor direto / visitor-id / UTM)
+  src: string | null            // purchase.tracking.source (canal de origem)
+  xcod: string | null           // origin.xcode (webhook-only; a API não traz)
+  external_code: string | null  // purchase.tracking.external_code
   imported_at: string
-  origem?: string               // derivado pela view hotmart_sales_origin (organico/trafego/comercial/a_classificar)
+  origem?: string               // derivado pela view: GRUPO (organico/trafego/comercial/afiliado/a_classificar)
+  canal?: string | null         // derivado pela view: nome do canal de origem
+  channel_id?: string | null    // derivado pela view: id do canal de origem
 }
 
 // Vendedor direto (atribuição por sck, não-afiliado) + de-para sck → vendedor
