@@ -293,6 +293,12 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       setSalvando(false)
       return
     }
+    // trava de integridade: sem conta do plano, o lançamento SOME da DRE (o JOIN o engole).
+    if (!form.chart_of_account_id) {
+      setErro('Escolha a "Conta do Plano de Contas" — sem ela o lançamento não aparece na DRE.')
+      setSalvando(false)
+      return
+    }
     const status = form.status
     const payment_date = status === 'paid' && !form.payment_date ? hoje() : form.payment_date || null
     // dia-âncora da recorrência: novo lançamento ou alteração do vencimento
@@ -311,8 +317,10 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       interest_amount: num(form.interest),
       fine_amount: num(form.fine),
       discount_amount: num(form.discount),
-      competency_date: form.competency_date || null,
-      chart_of_account_id: form.chart_of_account_id || null,
+      // competência nunca nula: cai pra emissão e, por fim, vencimento (sempre preenchido)
+      // — senão o lançamento sairia da DRE por competência pelo filtro de data.
+      competency_date: form.competency_date || form.issue_date || form.due_date,
+      chart_of_account_id: form.chart_of_account_id,
       dre_product_id: form.dre_product_id || null,
       refund_of_entry_id: form.refund_of_entry_id || null,
       issue_date: form.issue_date || null,
@@ -889,9 +897,9 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Conta do Plano de Contas</label>
+              <label className="block text-sm font-medium mb-1">Conta do Plano de Contas <span className="text-expense">*</span></label>
               <select className={inputCls} value={form.chart_of_account_id} onChange={(e) => setForm({ ...form, chart_of_account_id: e.target.value })}>
-                <option value="">Sem conta DRE</option>
+                <option value="">— Escolha a conta (obrigatório p/ DRE) —</option>
                 {chartAccounts.map((c) => <option key={c.id} value={c.id}>{c.code} – {c.name}</option>)}
               </select>
             </div>
