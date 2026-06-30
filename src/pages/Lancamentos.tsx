@@ -898,9 +898,10 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
             <div>
               <label className="block text-sm font-medium mb-1">Produto / Centro de Custo</label>
               <select className={inputCls} value={form.dre_product_id} onChange={(e) => setForm({ ...form, dre_product_id: e.target.value })}>
-                <option value="">Nenhum</option>
+                <option value="">— Herdar da conta do Plano —</option>
                 {dreProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+              <p className="text-xs text-fg-subtle mt-1">Vazio = usa o produto vinculado à conta acima (na DRE por Produto). Escolha aqui só pra sobrepor.</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Conta</label>

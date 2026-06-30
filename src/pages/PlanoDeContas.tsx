@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Plus, Pencil, PowerOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
-import type { ChartOfAccount } from '../lib/types'
+import type { ChartOfAccount, DreProduct } from '../lib/types'
 import { Card, PageHeader, Modal, Vazio, ErroBanner, Badge, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 import { useConfirm } from '../components/Confirm'
 import { useToast } from '../components/Toast'
@@ -42,6 +42,7 @@ interface FormState {
   nature: Nature
   is_analytical: boolean
   rateio_por_produto: boolean
+  dre_product_id: string // vínculo conta → produto DRE (só vale acima da margem)
   sort_order: string
   active: boolean
 }
@@ -65,6 +66,7 @@ const FORM_VAZIO: FormState = {
   nature: 'revenue',
   is_analytical: true,
   rateio_por_produto: true,
+  dre_product_id: '',
   sort_order: '0',
   active: true,
 }
@@ -74,6 +76,7 @@ export default function PlanoDeContas() {
   const confirmar = useConfirm()
   const toast = useToast()
   const [contas, setContas] = useState<ChartRow[]>([])
+  const [produtos, setProdutos] = useState<DreProduct[]>([])
   const [erro, setErro] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [modal, setModal] = useState(false)
@@ -93,6 +96,8 @@ export default function PlanoDeContas() {
       return
     }
     setContas((data as ChartRow[]) ?? [])
+    const { data: prods } = await supabase.from('dre_products').select('*').eq('active', true).order('sort_order')
+    setProdutos((prods as DreProduct[]) ?? [])
     setCarregando(false)
   }, [])
 
@@ -114,6 +119,7 @@ export default function PlanoDeContas() {
       nature: c.nature,
       is_analytical: c.is_analytical,
       rateio_por_produto: c.rateio_por_produto ?? rateioPadrao(c.nature),
+      dre_product_id: c.dre_product_id ?? '',
       sort_order: String(c.sort_order),
       active: c.active,
     })
@@ -129,7 +135,9 @@ export default function PlanoDeContas() {
       parent_id: form.parent_id || null,
       nature: form.nature,
       is_analytical: form.is_analytical,
-      rateio_por_produto: form.rateio_por_produto,
+      // produto só vale acima da margem; rateio_por_produto reaproveitado = "tem produto?"
+      dre_product_id: rateioPadrao(form.nature) ? (form.dre_product_id || null) : null,
+      rateio_por_produto: rateioPadrao(form.nature) && !!form.dre_product_id,
       sort_order: Number(form.sort_order) || 0,
       active: form.active,
     }
@@ -224,7 +232,7 @@ export default function PlanoDeContas() {
                   <th className="text-left px-4 py-3 font-medium text-fg-muted">Nome</th>
                   <th className="text-left px-4 py-3 font-medium text-fg-muted whitespace-nowrap">Natureza</th>
                   <th className="text-left px-4 py-3 font-medium text-fg-muted whitespace-nowrap">Tipo</th>
-                  <th className="text-left px-4 py-3 font-medium text-fg-muted whitespace-nowrap">Rateio p/ produto</th>
+                  <th className="text-left px-4 py-3 font-medium text-fg-muted whitespace-nowrap">Produto DRE</th>
                   <th className="text-left px-4 py-3 font-medium text-fg-muted whitespace-nowrap">Ativa</th>
                   {isAdmin && (
                     <th className="text-right px-4 py-3 font-medium text-fg-muted whitespace-nowrap">Ações</th>
@@ -260,9 +268,11 @@ export default function PlanoDeContas() {
                         </Badge>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <Badge tom={c.rateio_por_produto ? 'revenue' : 'muted'}>
-                          {c.rateio_por_produto ? 'Sim' : 'Não'}
-                        </Badge>
+                        {c.dre_product_id
+                          ? <Badge tom="revenue">{produtos.find((p) => p.id === c.dre_product_id)?.name ?? 'produto'}</Badge>
+                          : rateioPadrao(c.nature)
+                            ? <span className="text-xs text-warning">a classificar</span>
+                            : <span className="text-xs text-fg-subtle">—</span>}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <span className={`text-xs font-medium ${c.active ? 'text-revenue' : 'text-fg-subtle'}`}>
@@ -386,16 +396,6 @@ export default function PlanoDeContas() {
             <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
               <input
                 type="checkbox"
-                checked={form.rateio_por_produto}
-                onChange={(e) => setForm({ ...form, rateio_por_produto: e.target.checked })}
-                className="rounded border-border-strong text-brand focus:ring-brand"
-              />
-              Rateia por produto
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
-              <input
-                type="checkbox"
                 checked={form.active}
                 onChange={(e) => setForm({ ...form, active: e.target.checked })}
                 className="rounded border-border-strong text-brand focus:ring-brand"
@@ -403,9 +403,25 @@ export default function PlanoDeContas() {
               Ativa
             </label>
           </div>
-          <p className="text-xs text-fg-subtle -mt-2">
-            "Rateia por produto" = a conta aparece por produto na DRE por Produto (receita/dedução/custo variável). Estrutura (despesas fixas/financeiro/impostos) fica na coluna Total.
-          </p>
+
+          {/* Produto DRE: só faz sentido acima da margem (receita/dedução/custo variável).
+              A receita lançada nesta conta cai neste produto na DRE por Produto. */}
+          {rateioPadrao(form.nature) && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Produto DRE</label>
+              <select
+                className={inputCls}
+                value={form.dre_product_id}
+                onChange={(e) => setForm({ ...form, dre_product_id: e.target.value })}
+              >
+                <option value="">— Nenhum (cai em "A classificar") —</option>
+                {produtos.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <p className="text-xs text-fg-subtle mt-1">
+                A receita/custo lançado nesta conta aparece neste produto na DRE por Produto (o lançamento ainda pode sobrepor manualmente). Contas de estrutura (despesas fixas/financeiro/impostos) não têm produto — vão pra coluna Total.
+              </p>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-1">
             <button type="submit" className={btnPrimario + ' flex-1 justify-center'}>

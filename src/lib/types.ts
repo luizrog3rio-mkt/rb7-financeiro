@@ -200,6 +200,7 @@ export interface ChartOfAccount {
   sort_order: number
   active: boolean
   rateio_por_produto?: boolean
+  dre_product_id?: string | null // vínculo conta → produto DRE (DRE por produto)
   parent?: ChartOfAccount | null
 }
 
