@@ -73,16 +73,20 @@ export default function RegraModal({ modo, regraId, inicial, grupos, sellers, on
     setSalvando(true)
     const payload = { src_value: novaRegra.src_value.trim() || null, src_match: novaRegra.src_match, sck_value: novaRegra.sck_value.trim() || null, sck_match: novaRegra.sck_match, xcode_value: novaRegra.xcode_value.trim() || null, xcode_match: novaRegra.xcode_match, afiliado_value: novaRegra.afiliado_value.trim() || null, afiliado_match: novaRegra.afiliado_match, group_id: novaRegra.group_id || null, seller_id: novaRegra.seller_id || null }
     const dupMsg = 'Essa regra já existe (mesmas condições e destino).'
+    // o reapply pode falhar mesmo com a regra salva — checar o erro e NÃO fechar como
+    // sucesso (senão a regra fica salva mas não aplicada, sem o usuário saber).
+    let reErr: { message: string } | null
     if (modo === 'criar') {
       const { error } = await supabase.from('origin_tracking_rules').insert(payload)
       if (error) { setErro(error.code === '23505' ? dupMsg : 'Erro ao salvar regra: ' + error.message); setSalvando(false); return }
-      await supabase.rpc('apply_origin_rules')
+      reErr = (await supabase.rpc('apply_origin_rules')).error
     } else {
       const { error } = await supabase.from('origin_tracking_rules').update(payload).eq('id', regraId!)
       if (error) { setErro(error.code === '23505' ? dupMsg : 'Erro ao editar regra: ' + error.message); setSalvando(false); return }
-      await supabase.rpc('force_apply_origin_rule', { p_rule_id: regraId! })
+      reErr = (await supabase.rpc('force_apply_origin_rule', { p_rule_id: regraId! })).error
     }
     setSalvando(false)
+    if (reErr) { setErro('Regra salva, mas a aplicação falhou: ' + reErr.message + '. Tente "Aplicar agora".'); return }
     onSalvou()
   }
 

@@ -161,29 +161,33 @@ export default function Hotmart() {
     setImportando(true)
     setMsg(null)
     setErro(null)
-    const texto = await file.text()
-    const { vendas: parsed, erros } = parseHotmartCSV(texto)
-    if (parsed.length === 0) {
-      setMsg('Nenhuma venda válida no arquivo. ' + erros.slice(0, 3).join(' '))
-      setImportando(false)
-      return
-    }
-    // dedupe no lote (última ocorrência vence): com merge, código repetido no
-    // mesmo arquivo derrubaria o upsert inteiro (erro 21000 do Postgres)
-    const porCodigo = new Map(parsed.map((v) => [v.transaction_code, v]))
-    const linhas = [...porCodigo.values()].map((v) => ({ ...v, company_id: empresaDestino }))
-    const { error, data } = await supabase
-      .from('hotmart_sales')
-      .upsert(linhas, { onConflict: 'transaction_code' })
-      .select('id')
-    if (error) setMsg(`Erro: ${error.message}`)
-    else
+    // try/finally: qualquer falha (ler arquivo, parse, upsert) sempre libera o botão.
+    try {
+      const texto = await file.text()
+      const { vendas: parsed, erros } = parseHotmartCSV(texto)
+      if (parsed.length === 0) {
+        setMsg('Nenhuma venda válida no arquivo. ' + erros.slice(0, 3).join(' '))
+        return
+      }
+      // dedupe no lote (última ocorrência vence): com merge, código repetido no
+      // mesmo arquivo derrubaria o upsert inteiro (erro 21000 do Postgres)
+      const porCodigo = new Map(parsed.map((v) => [v.transaction_code, v]))
+      const linhas = [...porCodigo.values()].map((v) => ({ ...v, company_id: empresaDestino }))
+      const { error, data } = await supabase
+        .from('hotmart_sales')
+        .upsert(linhas, { onConflict: 'transaction_code' })
+        .select('id')
+      if (error) { setMsg(`Erro: ${error.message}`); return }
       setMsg(
         `${parsed.length} vendas no arquivo · ${data?.length ?? 0} importadas/atualizadas.` +
           (erros.length ? ` Avisos: ${erros.slice(0, 3).join(' ')}` : '')
       )
-    setImportando(false)
-    recarregarTudo()
+      recarregarTudo()
+    } catch (e) {
+      setMsg('Falha ao importar: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setImportando(false)
+    }
   }
 
   // Sincronização direta via API (Edge Function hotmart-sync) — sem CSV.
