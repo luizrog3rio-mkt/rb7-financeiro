@@ -89,6 +89,23 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `rateio_por_produto` era **morto** (nenhuma função/UI lia) → **reaproveitado** = "tem
   produto?" (derivado de `dre_product_id is not null` no save). Quem fica sem produto cai
   em "(A classificar)". `dre_by_product` é `security invoker`.
+- **DRE por COMPETÊNCIA — receita Hotmart dividida pelas contas do plano (2026-06-30, pedido do
+  Luiz):** antes a receita Hotmart era 1 linha sintética única ("Vendas Hotmart") e as contas de
+  receita do plano (Mentorias/Cursos) ficavam vazias. Agora a `dre_by_competency` **divide o bruto
+  Hotmart entre as contas de receita** pela cadeia **venda → `hotmart_product_map.product` →
+  `coalesce(pm.chart_of_account_id, dre_products.chart_of_account_id)` → conta** (3ª união do CTE
+  `mov`). **Dois níveis com prioridade:** (1) **mapa DIRETO** `hotmart_product_map.chart_of_account_id`
+  (coluna "Conta de Receita (direto)" na tela **Mapear produtos**) — ganha; (2) **via Produto DRE**
+  `dre_products.chart_of_account_id` (seletor "Conta de Receita" na tela **Produtos DRE**) — fallback.
+  O bruto **não-mapeado** vira a linha sintética **"Vendas Hotmart (a classificar)"** (HOT-1, é o
+  termômetro do que falta mapear); **taxa (HOT-2) e comissões (HOT-3) seguem agregadas** (deduções/
+  custos nível-empresa, NÃO dividem por conta). Total sempre preservado (mapeado + a-classificar =
+  bruto). Migrations: `dre_products_chart_of_account` (`20260630202547`),
+  `dre_competencia_split_hotmart_por_conta` (`20260630202639`), `hotmart_product_map_chart_account_direto`
+  (`20260630204421`), `dre_competencia_hotmart_conta_direta` (`20260630204455`). Direção: o plano
+  granular (1 conta/curso) usa o mapa direto; categorias coarse usam o via-Produto-DRE. **Só afeta a
+  DRE por competência** — a `dre_by_product` (por produto) é independente. ⚠️ O `mov` do cartão tem
+  guarda de natureza de custo (`dre_competencia_guarda_natureza_cartao` `20260630190014`).
 - **RLS = modelo de EQUIPE**: `using (true) with check (true)` para
   authenticated em todas as tabelas (Fase 1b/1c). Os ~11 WARNs
   `rls_policy_always_true` dos advisors são **aceitos por design**.

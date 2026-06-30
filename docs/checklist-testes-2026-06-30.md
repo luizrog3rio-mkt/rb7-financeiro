@@ -30,6 +30,27 @@
 
 ---
 
+## 🟠 1B. Dividir a receita Hotmart pelas contas do plano (NOVO)
+
+> Por padrão a receita Hotmart entra como uma linha única **"Vendas Hotmart (a classificar)"**. Pra ela cair nas contas do plano (Mentorias/Cursos), você mapeia. Há **2 jeitos** — use o que fizer sentido (o direto tem prioridade).
+
+- [ ] **1B.1 — Mapa DIRETO (produto Hotmart → conta) — ideal pro plano granular (1 conta/curso)**
+  - Como: **Receitas & Vendas → Mapear produtos**. Na coluna nova **"Conta de Receita (direto)"**, escolha a conta de um produto (ex.: **"Usando a Oratória pra Viralizar" → 1.2.01**).
+  - Esperado: salva sozinho (toast "Conta vinculada"). Na DRE, a receita daquele produto sai de "Vendas Hotmart (a classificar)" e entra na conta escolhida.
+  - ⚠️ Olhe o **ano certo**: ex.: o Oratória vendeu em **2025** (na DRE de 2026 fica R$ 0).
+
+- [ ] **1B.2 — Mapa via Produto DRE (categorias coarse → conta)**
+  - Como: **Cadastros → Produtos DRE**, edite um produto (ex.: "Cursos") e escolha a **"Conta de Receita"**.
+  - Esperado: toda venda Hotmart ligada a esse Produto DRE cai nessa conta — a menos que o produto tenha conta **DIRETA** (1B.1), que ganha.
+
+- [ ] **1B.3 — O termômetro**
+  - Esperado: a linha **"Vendas Hotmart (a classificar)"** no topo da DRE mostra **quanto ainda falta mapear**. Conforme você liga as contas, ela encolhe; quando tudo estiver mapeado, some.
+
+- [ ] **1B.4 — Total não muda**
+  - Esperado: a **Receita Bruta total** é a MESMA antes e depois de mapear — só muda a *distribuição* entre as contas. (Taxa e comissões Hotmart seguem agregadas, não dividem por conta.)
+
+---
+
 ## 🔴 2. DRE por Produto  (menu: **DRE & Relatórios → DRE por Produto**)
 
 - [ ] **2.1 — Coluna % AV + Export**
