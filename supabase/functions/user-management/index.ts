@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       const result = (authData.users ?? []).map((u: any) => ({
         id: u.id,
         email: u.email,
-        role: roleMap.get(u.id) ?? 'admin',
+        role: roleMap.get(u.id) ?? 'viewer',
         banned: !!(u.banned_until && new Date(u.banned_until) > new Date()),
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at ?? null,
@@ -61,11 +61,11 @@ Deno.serve(async (req) => {
       })
       if (error) return json({ error: error.message }, 400)
       if (!novo) return json({ error: 'Falha ao criar usuário' }, 500)
-      // trigger cria o profile com role='admin' (default); atualiza se for viewer
-      if (role === 'viewer') {
-        await adminClient.from('profiles').update({ role: 'viewer' }).eq('id', novo.id)
-      }
-      return json({ id: novo.id, email: novo.email, role: role ?? 'admin' })
+      // o trigger cria o profile com role='viewer' (default fail-safe); seta o papel
+      // escolhido EXPLICITAMENTE — admin só quando pedido, nunca por omissão.
+      const novoRole = role === 'admin' ? 'admin' : 'viewer'
+      await adminClient.from('profiles').update({ role: novoRole }).eq('id', novo.id)
+      return json({ id: novo.id, email: novo.email, role: novoRole })
     }
 
     case 'update_role': {
