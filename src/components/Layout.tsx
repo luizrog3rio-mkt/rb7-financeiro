@@ -22,6 +22,7 @@ import {
   Filter,
   Boxes,
   GitCompare,
+  History,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -70,6 +71,7 @@ const grupos: Grupo[] = [
       { to: '/dre-produto', rotulo: 'DRE por Produto', icone: Boxes },
       { to: '/conciliacao-dre', rotulo: 'DRE × Caixa', icone: GitCompare },
       { to: '/periodos-fechados', rotulo: 'Períodos Fechados', icone: Lock },
+      { to: '/delecoes', rotulo: 'Log de Deleções', icone: History },
     ],
   },
   {
