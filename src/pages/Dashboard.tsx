@@ -87,10 +87,11 @@ export default function Dashboard() {
     if (e7) erros.push('hotmart a liberar: ' + e7.message)
     setALiberar(Number(al ?? 0))
 
-    // ── cartão: dados reais (faturas/transações vivas) ──
-    const { data: invs, error: e3 } = await supabase.from('invoices').select('*').order('imported_at', { ascending: false })
+    // ── cartão: dados reais (faturas/transações vivas) ── filtra por empresa (invoice→conta→empresa)
+    const { data: invs, error: e3 } = await supabase.from('invoices').select('*, account:accounts!account_id(company_id)').order('imported_at', { ascending: false })
     if (e3) erros.push('faturas: ' + e3.message)
-    setInvoices(invs ?? [])
+    const lista = (invs ?? []) as (Invoice & { account?: { company_id: string } | null })[]
+    setInvoices(empresaAtiva ? lista.filter((i) => i.account?.company_id === empresaAtiva.id) : lista)
     const { data: tx, error: e4 } = await supabase.from('transactions').select('amount, kind')
     if (e4) erros.push('transações: ' + e4.message)
     setTxs((tx as TxLite[]) ?? [])

@@ -1,4 +1,4 @@
--- APLICADA: 20260630114440
+-- APLICADA: 20260630111651
 -- Auditoria de seguranca: papel "fail-open". profiles.role tinha DEFAULT 'admin' e o
 -- handle_new_user nao setava role -> TODO usuario novo nascia ADMIN. E a policy "Users can
 -- update own profile" + grant UPDATE(role) deixava o proprio usuario se autopromover
