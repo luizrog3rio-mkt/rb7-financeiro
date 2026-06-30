@@ -107,9 +107,14 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
 - Edge Function **`hotmart-sync`** (verify_jwt=false): modo-usuário (JWT +
   RLS, botão na tela) e modo-serviço (header `x-service-auth` == secret
   `HOTMART_SYNC_SERVICE_KEY` → escreve com a service key). Secrets
-  `HOTMART_CLIENT_ID`/`HOTMART_CLIENT_SECRET` no env da function. Modos:
+  `HOTMART_CLIENT_ID`/`HOTMART_CLIENT_SECRET` no env da function. ⚠️ **Ao deployar
+  pelo MCP `deploy_edge_function`, SEMPRE passar `verify_jwt: false`** — o default
+  do tool é `true` e os crons chamam via `x-service-auth` SEM JWT (true quebraria os
+  3 crons no gate da plataforma). Vale pra `hotmart-sync` e `hotmart-webhook`. Modos:
   `{debug:true}` (1ª venda crua+mapeada sem gravar), `{refresh_status:N}`
-  (só serviço: re-checa N vendas por `?transaction=<id>` p/ capturar estorno),
+  (só serviço: re-checa N vendas por `?transaction=<id>` p/ capturar estorno; opcional
+  `all_history:true` ignora a janela de 200d p/ backfill histórico — auditoria 2026-06-30
+  mediu taxa de estorno >200d = 0% numa amostra de 100, full backfill descartado),
   `{refresh_commissions:N}` (só serviço: preenche afiliado/coprodução/líquido
   exato via `/sales/commissions`) e `{refresh_sck:N}` (só serviço: backfill do
   `sck` via `purchase.tracking.source_sck`, UPDATE não-destrutivo).
