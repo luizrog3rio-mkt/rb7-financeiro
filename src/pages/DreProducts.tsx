@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Plus, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
@@ -13,22 +13,27 @@ interface DreProduct {
   active: boolean
   sort_order: number
   created_at: string
+  chart_of_account_id: string | null
 }
+
+interface ContaReceita { id: string; code: string; name: string }
 
 interface FormState {
   id?: string
   name: string
   sort_order: string
   active: boolean
+  chart_of_account_id: string
 }
 
-const formVazio = (): FormState => ({ name: '', sort_order: '0', active: true })
+const formVazio = (): FormState => ({ name: '', sort_order: '0', active: true, chart_of_account_id: '' })
 
 export default function DreProducts() {
   const { isAdmin } = useApp()
   const confirmar = useConfirm()
   const toast = useToast()
   const [produtos, setProdutos] = useState<DreProduct[]>([])
+  const [contas, setContas] = useState<ContaReceita[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -43,19 +48,30 @@ export default function DreProducts() {
     const { data, error } = await supabase.from('dre_products').select('*').order('sort_order')
     if (error) { setErro('Erro ao carregar produtos DRE: ' + error.message); setCarregando(false); return }
     setProdutos((data as DreProduct[]) ?? [])
+    // contas de receita (Receita Bruta) pro vínculo Hotmart → conta na DRE por competência
+    const { data: accs } = await supabase
+      .from('chart_of_accounts').select('id, code, name')
+      .eq('nature', 'revenue').eq('active', true).order('code')
+    setContas((accs as ContaReceita[]) ?? [])
     setCarregando(false)
   }, [])
+
+  const contaNome = useMemo(() => {
+    const m = new Map<string, string>()
+    contas.forEach((c) => m.set(c.id, `${c.code} – ${c.name}`))
+    return m
+  }, [contas])
 
   useEffect(() => { carregar() }, [carregar])
 
   const abrirNovo = () => {
     const proximaOrdem = produtos.length > 0 ? Math.max(...produtos.map((p) => p.sort_order)) + 1 : 1
-    setForm({ name: '', sort_order: String(proximaOrdem), active: true })
+    setForm({ name: '', sort_order: String(proximaOrdem), active: true, chart_of_account_id: '' })
     setModal(true)
   }
 
   const abrirEdicao = (p: DreProduct) => {
-    setForm({ id: p.id, name: p.name, sort_order: String(p.sort_order), active: p.active })
+    setForm({ id: p.id, name: p.name, sort_order: String(p.sort_order), active: p.active, chart_of_account_id: p.chart_of_account_id ?? '' })
     setModal(true)
   }
 
@@ -66,15 +82,16 @@ export default function DreProducts() {
     setSalvando(true)
     setErro(null)
     const sortOrder = parseInt(form.sort_order, 10) || 0
+    const conta = form.chart_of_account_id || null
     if (form.id) {
       const { error } = await supabase
         .from('dre_products')
-        .update({ name: nome, sort_order: sortOrder, active: form.active })
+        .update({ name: nome, sort_order: sortOrder, active: form.active, chart_of_account_id: conta })
         .eq('id', form.id)
       if (error) { setErro('Erro ao salvar: ' + error.message); setSalvando(false); return }
     } else {
       // cria GLOBAL (company_id null) — taxonomia compartilhada
-      const { error } = await supabase.from('dre_products').insert({ name: nome, sort_order: sortOrder, active: form.active })
+      const { error } = await supabase.from('dre_products').insert({ name: nome, sort_order: sortOrder, active: form.active, chart_of_account_id: conta })
       if (error) { setErro('Erro ao criar: ' + error.message); setSalvando(false); return }
     }
     setSalvando(false)
@@ -148,6 +165,11 @@ export default function DreProducts() {
                   )}
                   <span className="text-xs text-fg-subtle w-6 text-right shrink-0 font-mono tnum">{p.sort_order}</span>
                   <span className="text-sm font-medium text-fg truncate">{p.name}</span>
+                  {p.chart_of_account_id && contaNome.has(p.chart_of_account_id) && (
+                    <span className="text-xs text-fg-subtle truncate hidden sm:inline" title="Conta de receita na DRE por competência">
+                      → {contaNome.get(p.chart_of_account_id)}
+                    </span>
+                  )}
                   <span className="shrink-0">
                     <Badge tom={p.active ? 'revenue' : 'muted'}>{p.active ? 'Ativa' : 'Inativa'}</Badge>
                   </span>
@@ -203,6 +225,14 @@ export default function DreProducts() {
               onChange={(e) => setForm({ ...form, sort_order: e.target.value })}
             />
             <p className="text-xs text-fg-subtle mt-1">Itens com menor número aparecem primeiro.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Conta de Receita (DRE por competência)</label>
+            <select className={inputCls} value={form.chart_of_account_id} onChange={(e) => setForm({ ...form, chart_of_account_id: e.target.value })}>
+              <option value="">— Não vincular (fica em "Vendas Hotmart a classificar") —</option>
+              {contas.map((c) => <option key={c.id} value={c.id}>{c.code} – {c.name}</option>)}
+            </select>
+            <p className="text-xs text-fg-subtle mt-1">A receita Hotmart dos produtos ligados a este Produto DRE entra nesta conta da Receita Bruta na <strong>DRE por competência</strong>. Sem vínculo, soma em "Vendas Hotmart (a classificar)".</p>
           </div>
           <div className="flex items-center gap-2">
             <input
