@@ -263,7 +263,15 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `KPIStrip` (faixa de KPIs), `Button` (primary/secondary/danger/ghost), `Alert`
   (info/success/warning/danger), `Badge`/`StatusBadge` por `tom` semântico — o
   `Badge cor={hex}` legado segue **só** p/ identidade de natureza (preservar). `btnPrimario`/`btnSecundario` viraram alias-string tokenizados.
-  Sidebar (`Layout.tsx`) clara, 7 grupos por domínio. **Gotcha Tailwind 4:** um
+  **Feedback global (auditoria de design 2026-06-30):** `src/components/Toast.tsx`
+  (`ToastProvider` no App + hook `useToast()(msg, tom?)`, aviso efêmero auto-some 3.5s)
+  pra sucesso de ações que retornavam em silêncio; `src/components/Confirm.tsx`
+  (`ConfirmProvider` + `useConfirm()` promise-based — `if (!(await confirmar({mensagem,
+  perigo:true}))) return`) **substituiu todos os `window.confirm`** por Modal do DS.
+  **Padrão de loading:** todas as telas têm `carregando`/skeleton (mata o flash de "R$ 0"
+  antes dos dados). Sidebar (`Layout.tsx`) clara, 7 grupos por domínio (rótulos pós-auditoria:
+  Compras pendentes · Conciliação Bancária · DRE × Caixa · Mapear produtos · **Origens** —
+  ver fusão acima). **Gotcha Tailwind 4:** um
   `*/` dentro de comentário no `index.css` fecha o comentário cedo e derruba o
   `@theme` inteiro (silencioso, sem erro óbvio) — nunca escrever `bg-*/text-*`
   em comentário.
