@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -10,6 +10,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
     __APP_VERSION__: JSON.stringify(versao),
+  },
+  // testes: funções puras de matemática de dinheiro (parsers/sinal/datas) rodam em
+  // 'node' sem jsdom. NÃO importar ./supabase em código testado aqui.
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
   },
   build: {
     rollupOptions: {

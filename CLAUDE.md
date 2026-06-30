@@ -327,6 +327,13 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `sb_publishable_`/`sb_secret_`; as JWT legadas estão **desabilitadas** — não
   reativar). `.env.example` na raiz.
 - `npm run dev` → localhost:5173 · `npm run build` (tsc strict + vite) ·
+  `npm run lint` · **`npm run test:run`** (vitest, single-pass) / `npm run test` (watch).
+  **Testes (auditoria 2026-06-30, antes ZERO):** vitest `environment:'node'` (config no
+  `vite.config.ts`), specs da matemática de dinheiro PURA em `src/lib/*.test.ts` — `fatura`
+  (valorComSinal + parseOFXCartao), `format` (datas + fake timers), `hotmart` (parseValor BR/US
+  + parseData + vendaAprovada), `ofxExtrato` (sinal preservado). 34 testes. Regra: **não importar
+  `./supabase` em código testado** (mantém os parsers puros). As RPCs de dinheiro (DRE/origem) só
+  testáveis com Postgres — pendente (stack local ou pgTAP).
   `npm run lint` (0 errors; os 28 warnings conscientes = 27 set-state-in-effect
   (fetch-on-mount das páginas + o debounce de alcance do RegraModal) + 1
   react-compiler "incompatible library" das libs de tabela na DataTable — ver

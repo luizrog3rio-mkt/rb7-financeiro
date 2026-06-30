@@ -55,7 +55,7 @@ function idxPor(headers: string[], ...palavras: string[]): number {
   })
 }
 
-function parseValor(raw: string | undefined): number {
+export function parseValor(raw: string | undefined): number {
   if (!raw) return 0
   let s = raw.replace(/[^\d.,-]/g, '')
   // formato BR: 1.234,56
@@ -67,7 +67,7 @@ function parseValor(raw: string | undefined): number {
   return isNaN(v) ? 0 : v
 }
 
-function parseData(raw: string | undefined): string | null {
+export function parseData(raw: string | undefined): string | null {
   if (!raw) return null
   const t = raw.trim()
   let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/)
