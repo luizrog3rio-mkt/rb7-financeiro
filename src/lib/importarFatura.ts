@@ -18,6 +18,12 @@ export async function importarFaturaOFX(
 ): Promise<{ ok: ResultadoImport | null; erro: string | null }> {
   const text = await file.text()
   const txs = parseOFXCartao(text)
+  // OFX vazio/malformado: NÃO criar fatura-fantasma (total 0) em silêncio — erro explícito,
+  // espelhando o guard do importarExtratoOFX. (O parser de cartão é case-sensitive e exige
+  // </STMTTRN>, então um formato inesperado retorna [] — daí o aviso.)
+  if (txs.length === 0) {
+    return { ok: null, erro: 'Nenhum lançamento encontrado no arquivo. Verifique se é um OFX de fatura de cartão válido.' }
+  }
   // total contábil: despesa soma, estorno/desconto abate (ver valorComSinal)
   const total = txs.reduce((s, t) => s + valorComSinal(t), 0)
 
