@@ -140,7 +140,7 @@ export default function DreProduto() {
     <div>
       <PageHeader
         titulo="DRE por Produto"
-        subtitulo="Margem de contribuição por produto (acima da margem rateia; estrutura é da empresa)"
+        subtitulo="Margem de contribuição por produto · COMPETÊNCIA · acima da margem rateia por produto, estrutura é da empresa (Total) · cartão NÃO entra (sem produto) — veja a DRE por competência"
         acao={temDados ? (
           <div className="flex gap-2">
             <Button variante="secondary" onClick={() => exportar('xlsx')}><Download size={16} /> Excel</Button>

@@ -74,7 +74,7 @@ export default function ConciliacaoDRE() {
 
   return (
     <div className="space-y-6">
-      <PageHeader titulo="Conciliação DRE × Caixa" />
+      <PageHeader titulo="Conciliação DRE × Caixa" subtitulo="Descasamento de TEMPO dos lançamentos: competência (data da venda/competência) × caixa (data do pagamento). Só lançamentos com conta do Plano; Hotmart não entra (não é lançamento)." />
 
       {erro && <ErroBanner mensagem={erro} />}
 

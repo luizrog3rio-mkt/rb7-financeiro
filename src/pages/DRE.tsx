@@ -196,7 +196,7 @@ export default function DRE() {
     <div>
       <PageHeader
         titulo="DRE"
-        subtitulo="Demonstração do resultado por margem de contribuição (competência)"
+        subtitulo="Resultado por margem de contribuição · regime de COMPETÊNCIA (data da venda/competência) · inclui Hotmart + cartão, classificado por conta do Plano"
         acao={temDados ? (
           <div className="flex gap-2">
             <Button variante="secondary" onClick={() => exportar('xlsx')}><Download size={16} /> Excel</Button>

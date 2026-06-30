@@ -206,6 +206,7 @@ export default function Dashboard() {
               {resultadoDelta != null && Number.isFinite(resultadoDelta) && (
                 <p className="mt-2"><DeltaTag pct={resultadoDelta} goodWhen="up" /></p>
               )}
+              <p className="mt-2 text-[11px] text-fg-subtle">Projeção do mês (a receber + Hotmart líquido − a pagar, em aberto por vencimento) — não é a DRE por competência.</p>
             </div>
           </div>
           <div className="flex flex-col justify-center md:border-l md:border-border md:pl-6">
