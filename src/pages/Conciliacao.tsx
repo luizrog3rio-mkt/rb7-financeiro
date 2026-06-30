@@ -166,6 +166,14 @@ export default function Conciliacao() {
               <Vazio mensagem={carregando ? 'Carregando…' : 'Sem linhas de extrato nesta conta. Importe um OFX na tela Extratos (OFX) para começar.'} />
             ) : (
               <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-fg-subtle uppercase tracking-wide">
+                    <th className="px-4 py-2.5 text-left font-medium w-24">Data</th>
+                    <th className="px-4 py-2.5 text-left font-medium">Descrição</th>
+                    <th className="px-4 py-2.5 text-right font-medium w-32">Valor</th>
+                    <th className="px-4 py-2.5 text-right font-medium w-40">Status</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {linhas.map((l) => (
                     <tr key={l.id} className="border-b border-border hover:bg-surface-2">

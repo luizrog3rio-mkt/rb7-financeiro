@@ -78,8 +78,8 @@ export default function ConciliacaoDRE() {
 
       {erro && <ErroBanner mensagem={erro} />}
 
-      <Card>
-        <div className="flex items-center gap-3 mb-4">
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
           <label className="text-sm font-medium text-fg-muted">Ano</label>
           <select
             className={inputCls + ' w-32'}
@@ -95,7 +95,7 @@ export default function ConciliacaoDRE() {
         </div>
 
         {loading ? (
-          <div className="py-12 text-center text-fg-muted text-sm">Carregando...</div>
+          <div className="py-12 text-center text-fg-muted text-sm">Carregando…</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
