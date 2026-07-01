@@ -115,6 +115,21 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
 - FKs de dados usam `ON DELETE RESTRICT` (registro financeiro não morre por
   arrasto; deletar usuário/conta com dados falha); vínculos fracos usam
   SET NULL.
+- **Intercompany é LEGÍTIMO por design (decisão do Luiz, 2026-06-30):** um `entries`
+  cuja conta pagadora (`account_id`) é de OUTRA empresa que o `company_id` do lançamento
+  (empresa A paga a conta de B) **não é bug** — é o modelo real da RB7 (ex.: 3 lançamentos
+  do projeto CASAS ALFENAS, despesa da RB7 INCORPORADORA, pagos pela CONTA SICOOB da RB7
+  DIGITAL, R$10.811,90). **NÃO adicionar guard rígido** (CHECK/trigger) barrando
+  `account.company_id <> entries.company_id` — isso é a única forma de acertar DRE (fica na
+  empresa dona do projeto) E conciliação de caixa (casa o extrato real da conta pagadora) ao
+  mesmo tempo. Guard é **suave/visível**: a tela de Lançamentos marca cada um com Badge
+  "intercompany" na coluna Empresa (mostra qual empresa pagou) + Alert com contagem/soma. O
+  bulk-move-empresa (`aplicarEmpresaEmMassa`) é **não-destrutivo**: move e avisa se ficou
+  intercompany, **nunca zera** a conta (o form individual ainda zera `account_id` ao trocar
+  empresa — comportamento legado, não confundir). ⚠️ Há uma conta ESPELHO vazia "CONTA SICOOB
+  - RB7 DIGITAL" sob a RB7 INCORPORADORA (id 45aa0e1b, 0 entries, nome duplicado da conta real
+  d3ab8b2b sob a DIGITAL) — resquício de uma tentativa de modelar intercompany por espelho;
+  os 3 do CASAS ALFENAS apontam pra conta REAL da DIGITAL, não pro espelho.
 - Funções novas: `set search_path = ''` sempre; RPCs precisam de
   `GRANT EXECUTE ... TO authenticated` explícito (default privileges foram
   revogados na Fase 1a). Extensões novas: `WITH SCHEMA extensions`.

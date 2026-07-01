@@ -5,7 +5,7 @@ import { useApp } from '../contexts/AppContext'
 import { fmtBRL, fmtData, hoje } from '../lib/format'
 import type { Account, Entry, EntryType, EntryStatus } from '../lib/types'
 import type { ChartOfAccount, DreProduct } from '../lib/types'
-import { Card, PageHeader, StatusBadge, Badge, Vazio, Modal, ErroBanner, KPICard, KPIStrip, inputCls, btnPrimario, btnSecundario } from '../components/ui'
+import { Card, PageHeader, StatusBadge, Badge, Vazio, Modal, ErroBanner, Alert, KPICard, KPIStrip, inputCls, btnPrimario, btnSecundario } from '../components/ui'
 import DataTable, { type DataColumn } from '../components/DataTable'
 import { exportTabelaCSV, exportTabelaXLSX } from '../lib/exportTabela'
 import { useToast } from '../components/Toast'
@@ -555,6 +555,13 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     pago: lancamentosExibidos.filter((l) => l.status === 'paid' && !l.transfer_id).reduce((s, l) => s + valorPago(l), 0),
   }), [lancamentosExibidos])
 
+  // intercompany: lançamento cuja conta pagadora é de OUTRA empresa (empresa A paga
+  // conta de B). É legítimo por design (decisão do Luiz 2026-06-30) — só sinaliza, não bloqueia.
+  const intercompany = useMemo(
+    () => lancamentosExibidos.filter((l) => l.account && l.account.company_id !== l.company_id),
+    [lancamentosExibidos]
+  )
+
   // total da coluna Valor (rodapé da tabela): exclui cancelados (anulados não
   // contam), exceto quando o filtro é justamente "Cancelado" — assim o rodapé
   // concilia com os cards (A pagar + Pendente + Pago)
@@ -626,27 +633,23 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     carregar()
   }
 
-  // mover os selecionados para outra empresa (com confirm — reatribui os books)
+  // mover os selecionados para outra empresa (com confirm)
   const aplicarEmpresaEmMassa = async (companyId: string) => {
     if (selectedIds.length === 0 || !companyId) return
     const emp = empresas.find((e) => e.id === companyId)
     const n = selectedIds.length
     if (!(await confirmar({ titulo: 'Mover empresa', mensagem: `Mover ${n} ${n === 1 ? 'lançamento' : 'lançamentos'} para a empresa "${emp?.name ?? ''}"?` }))) return
-    // conta de OUTRA empresa vira órfã ao mover (o caixa fica na empresa errada) → desvincula,
-    // igual o form individual faz ao trocar empresa. Só as com conta de empresa diferente da destino.
+    // conta de outra empresa é INTERCOMPANY legítimo (empresa A paga conta de B) — NÃO desvincula,
+    // só detecta pra avisar no toast (o badge na lista sinaliza permanentemente).
     const { data: sel } = await supabase
       .from('entries').select('id, account_id, account:accounts!account_id(company_id)').in('id', selectedIds)
-    const orfaos = ((sel ?? []) as unknown as { id: string; account_id: string | null; account: { company_id: string | null } | null }[])
-      .filter((e) => e.account_id && e.account?.company_id && e.account.company_id !== companyId).map((e) => e.id)
+    const cross = ((sel ?? []) as unknown as { id: string; account_id: string | null; account: { company_id: string | null } | null }[])
+      .filter((e) => e.account_id && e.account?.company_id && e.account.company_id !== companyId).length
     const { error } = await supabase.from('entries').update({ company_id: companyId }).in('id', selectedIds)
     if (error) { setErro('Erro ao alterar a empresa em massa: ' + error.message); return }
-    if (orfaos.length > 0) {
-      const { error: e2 } = await supabase.from('entries').update({ account_id: null }).in('id', orfaos)
-      if (e2) { setErro('Empresa alterada, mas falhou ao desvincular a conta de ' + orfaos.length + ': ' + e2.message); return }
-    }
     setRowSelection({})
     toast(`${n} ${n === 1 ? 'lançamento movido' : 'lançamentos movidos'} para ${emp?.name ?? 'a empresa'}` +
-      (orfaos.length > 0 ? ` · ${orfaos.length} com conta de outra empresa foram desvinculados (reassocie a conta)` : ''))
+      (cross > 0 ? ` · ${cross} ficaram intercompany (conta de outra empresa) — revise se preciso` : ''))
     carregar()
   }
 
@@ -661,9 +664,21 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       </div>
     ), footer: 'Total' },
     ...(empresas.length > 1 ? [{
-      id: 'empresa', header: 'Empresa', size: 140, cell: (l: Entry) => {
+      id: 'empresa', header: 'Empresa', size: 160, cell: (l: Entry) => {
         const emp = empresas.find((e) => e.id === l.company_id)
-        return emp ? <span className="text-fg-muted">{emp.name}</span> : <span className="text-fg-subtle">—</span>
+        // conta pagadora de outra empresa = intercompany (legítimo) → sinaliza qual empresa pagou
+        const contaEmp = l.account && l.account.company_id !== l.company_id
+          ? empresas.find((e) => e.id === l.account?.company_id) : null
+        return (
+          <div>
+            {emp ? <span className="text-fg-muted">{emp.name}</span> : <span className="text-fg-subtle">—</span>}
+            {contaEmp && (
+              <span title={`Pago pela conta da ${contaEmp.name} (intercompany)`} className="ml-1 align-middle">
+                <Badge tom="warning">intercompany</Badge>
+              </span>
+            )}
+          </div>
+        )
       },
     } satisfies DataColumn<Entry>] : []),
     { id: 'chart_of_account', header: 'Conta DRE', size: 160, cell: (l) =>
@@ -795,6 +810,16 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
           <KPICard bare tom="revenue" label={ehPagar ? 'Pago' : 'Recebido'} valor={fmtBRL(totais.pago)} />
         </KPIStrip>
       </div>
+
+      {intercompany.length > 0 && (
+        <div className="mb-4">
+          <Alert tom="info">
+            {intercompany.length} {intercompany.length === 1 ? 'lançamento é' : 'lançamentos são'} intercompany
+            {' '}({fmtBRL(intercompany.reduce((s, l) => s + Number(l.amount), 0))}) — pagos pela conta de outra empresa.
+            É legítimo por design; a coluna Empresa marca cada um.
+          </Alert>
+        </div>
+      )}
 
       <Card className="p-4 mb-4">
         <div className="flex flex-wrap items-end gap-4">
