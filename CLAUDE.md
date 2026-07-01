@@ -264,6 +264,13 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   persist do CRU falhar — falha de derivação fica em `process_error` e o cron
   `hotmart-webhook-drain` (1 min, SQL puro, `drain_hotmart_webhook_events`)
   reprocessa; motivo: 5xx em 5 reentregas faz a Hotmart **auto-desativar** a config.
+  ⚠️ **`process_error` = SÓ falha real** (migration `webhook_skip_nao_e_erro` `20260701034823`,
+  auditoria 2026-06-30): um `SUBSCRIPTION_CANCELLATION` (e qualquer evento sem `transaction_code`)
+  é um **skip legítimo** — não vira linha em `hotmart_sales`. Antes o `apply_hotmart_webhook_event`
+  gravava esse skip no `process_error` → 9 eventos "com erro" que não eram falha (escondiam um erro
+  DE VERDADE no meio; o drain não os re-tenta, `processed_at` já setado). Agora o branch `v_tx is
+  null` só dá `return` (o tipo fica em `event`). Monitorar por `process_error is not null` = falhas
+  reais (hoje 0); "skip" = `processed_at not null and transaction_code is null`.
   Tripla rede: inline → drain → crons da API. **Anti-regressão de estorno por
   TRIGGER** `trg_hotmart_status_guard` (congela REFUNDED/CHARGEBACK contra QUALQUER
   writer — webhook, sync e `refresh_status`); status canônico vem do `event`
