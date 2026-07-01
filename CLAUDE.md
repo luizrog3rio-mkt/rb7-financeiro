@@ -150,7 +150,12 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   preciso, paginar por `.range(from, from+999)` em loop até a página vir incompleta
   (ex.: `carregarVendas` do `/hotmart` quando há filtro ativo busca TODAS as que casam,
   não só 1000 — com `.order` + tiebreaker `transaction_code` pra paginação estável, e a
-  virtualização do DataTable aguenta renderizar os milhares).
+  virtualização do DataTable aguenta renderizar os milhares). **Flag de truncamento silencioso
+  (auditoria 2026-06-30):** listas que carregam SEM paginar e dependem do teto de 1000 avisam
+  quando batem nele — Lançamentos seta `truncado` (`data.length >= 1000`) e mostra um Alert
+  "mostrando só 1000, refine filtros" (totais/export também se limitam ao carregado). Extrato já
+  fazia isso via `limit(300)` + `extrato_totais.qtd` (KPI "mostrando 300"). Fatura/Compras são
+  limitados por natureza (por-fatura, pendentes) → sem flag.
 
 ## Hotmart (integração viva)
 
@@ -175,6 +180,12 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   `hotmart-commissions-diario` (09:45 UTC, **por último**, preenche afiliado/
   coprodução/líquido exato via modo `refresh_commissions=400`, rodízio por
   `commission_checked_at` + re-checa a janela recente ~35d que o sync regrava).
+  ⚠️ **Invariante das janelas (auditoria 2026-06-30, verificado ALINHADO):** o sync diário passa
+  `months:1` (regrava **30d**) e o commissions re-checa **35d** → 35 ≥ 30, cobre com 5d de margem.
+  O status re-checa 200d. Se algum dia o sync mudar pra `months:2` (60d), o commissions (35d)
+  deixa de cobrir o pedaço 35–60d — bump o `recente` no edge junto. (Hoje o risco é baixo: o fix
+  do `net_amount` fez o `mapSale` NÃO emitir mais comissão/net, então o sync não re-clobbra o que
+  o commissions grava — o re-check só acelera capturar comissão nova.)
 - **`sck` e `afiliado` (atribuição de vendedor) — hoje via modelo de canais (ver "Origem da
   venda" abaixo)**: a API `/sales/history` traz `purchase.tracking.source_sck` (NÃO `sck`) →
   `mapSale` grava em `hotmart_sales.sck`. Valor ruidoso: visitor-id (`<ts>_<id>`) / UTM (`a|b|c`)

@@ -165,6 +165,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [carregando, setCarregando] = useState(true)
+  const [truncado, setTruncado] = useState(false) // bateu o teto de 1000 linhas do PostgREST
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [chartAccounts, setChartAccounts] = useState<ChartOfAccount[]>([])
   const [dreProducts, setDreProducts] = useState<DreProduct[]>([])
@@ -198,7 +199,11 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
     if (dataAte) q = q.lte('due_date', dataAte)
     const { data, error } = await q
     if (error) setErro('Erro ao carregar lançamentos: ' + error.message)
-    else setLancamentos((data as Entry[]) ?? [])
+    else {
+      const rows = (data as Entry[]) ?? []
+      setLancamentos(rows)
+      setTruncado(rows.length >= 1000) // PostgREST corta em 1000 — avisa pra refinar filtros
+    }
     setCarregando(false)
   }, [tipo, empresaAtiva, filtroStatus, filtroEmpresa, dataDe, dataAte])
 
@@ -817,6 +822,15 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
           <KPICard bare tom="revenue" label={ehPagar ? 'Pago' : 'Recebido'} valor={fmtBRL(totais.pago)} />
         </KPIStrip>
       </div>
+
+      {truncado && (
+        <div className="mb-4">
+          <Alert tom="warning">
+            Mostrando só as primeiras <span className="font-semibold text-fg">1000</span> linhas (teto do banco).
+            Refine por empresa, status ou período para ver o restante — totais e exportação também se limitam ao que está carregado.
+          </Alert>
+        </div>
+      )}
 
       {intercompany.length > 0 && (
         <div className="mb-4">
