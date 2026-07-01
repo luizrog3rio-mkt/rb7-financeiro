@@ -225,6 +225,13 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   }
 
   const abrirEdicao = useCallback((l: Entry) => {
+    // transferência é um PAR amarrado por transfer_id, sem conta do plano (neutra na DRE). Editar
+    // uma perna aqui obrigaria a conta do plano (trava do save) e quebraria a neutralidade → some
+    // vira despesa/receita-fantasma. Editar transferência = excluir e recriar em /transferencias.
+    if (l.transfer_id) {
+      setErro('Transferências não são editadas por aqui (quebraria o par). Para ajustar, exclua e recrie em Transferências.')
+      return
+    }
     setForm({
       id: l.id,
       company_id: l.company_id,
@@ -674,12 +681,17 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   const aplicarContaEmMassa = async (chartId: string) => {
     if (selectedIds.length === 0 || !chartId) return
     const conta = chartAccounts.find((c) => c.id === chartId)
-    const n = selectedIds.length
-    if (!(await confirmar({ titulo: 'Classificar em massa', mensagem: `Atribuir a conta "${conta?.code} – ${conta?.name}" a ${n} ${n === 1 ? 'lançamento' : 'lançamentos'}?` }))) return
-    const { error } = await supabase.from('entries').update({ chart_of_account_id: chartId }).in('id', selectedIds)
+    // transferências não recebem conta do plano (são neutras na DRE) — pula as pernas selecionadas
+    const transferIds = new Set(lancamentos.filter((l) => l.transfer_id).map((l) => l.id))
+    const alvos = selectedIds.filter((id) => !transferIds.has(id))
+    const pulados = selectedIds.length - alvos.length
+    if (alvos.length === 0) { setErro('Só transferências selecionadas — elas não recebem Conta do Plano (são neutras na DRE).'); return }
+    const n = alvos.length
+    if (!(await confirmar({ titulo: 'Classificar em massa', mensagem: `Atribuir a conta "${conta?.code} – ${conta?.name}" a ${n} ${n === 1 ? 'lançamento' : 'lançamentos'}?` + (pulados > 0 ? ` (${pulados} transferência(s) serão puladas)` : '') }))) return
+    const { error } = await supabase.from('entries').update({ chart_of_account_id: chartId }).in('id', alvos)
     if (error) { setErro('Erro ao classificar em massa: ' + error.message); return }
     setRowSelection({})
-    toast(`${n} ${n === 1 ? 'lançamento classificado' : 'lançamentos classificados'} em ${conta?.code ?? 'conta'}`)
+    toast(`${n} ${n === 1 ? 'lançamento classificado' : 'lançamentos classificados'} em ${conta?.code ?? 'conta'}` + (pulados > 0 ? ` · ${pulados} transferência(s) puladas` : ''))
     carregar()
   }
 
@@ -760,7 +772,7 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
             <CheckCircle2 size={17} />
           </button>
         )}
-        {isAdmin && (
+        {isAdmin && !l.transfer_id && (
           <button title="Editar" onClick={() => abrirEdicao(l)} className="text-fg-subtle hover:text-brand">
             <Pencil size={16} />
           </button>

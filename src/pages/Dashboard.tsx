@@ -7,7 +7,7 @@ import { useApp } from '../contexts/AppContext'
 import { fmtBRL, fmtData, hoje } from '../lib/format'
 import { fmt } from '../lib/fatura'
 import type { Entry, HotmartSale, Invoice } from '../lib/types'
-import { Card, PageHeader, StatusBadge, ErroBanner, KPICard, KPIStrip, DeltaTag } from '../components/ui'
+import { Card, PageHeader, StatusBadge, ErroBanner, Alert, KPICard, KPIStrip, DeltaTag } from '../components/ui'
 
 interface MesAgg { mes: string; receber: number; pagar: number }
 
@@ -23,6 +23,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 export default function Dashboard() {
   const { empresaAtiva } = useApp()
   const [lancamentos, setLancamentos] = useState<Entry[]>([])
+  const [lancTruncado, setLancTruncado] = useState(false) // janela do fluxo bateu o teto de 1000
   const [vendas, setVendas] = useState<HotmartSale[]>([])
   const [hotmartMesNet, setHotmartMesNet] = useState(0)
   const [hotmartPrevNet, setHotmartPrevNet] = useState(0)
@@ -49,6 +50,7 @@ export default function Dashboard() {
     const { data: ls, error: e1 } = await ql
     if (e1) erros.push('lançamentos: ' + e1.message)
     setLancamentos((ls as Entry[]) ?? [])
+    setLancTruncado((ls?.length ?? 0) >= 1000) // PostgREST corta em 1000 → KPIs sub-contariam sem aviso
 
     let qv = supabase.from('hotmart_sales').select('*').gte('sale_date', inicio)
     if (empresaAtiva) qv = qv.eq('company_id', empresaAtiva.id)
@@ -194,6 +196,14 @@ export default function Dashboard() {
       <PageHeader titulo="Dashboard" subtitulo={empresaAtiva ? empresaAtiva.name : 'Visão consolidada'} />
 
       <ErroBanner mensagem={erro} />
+
+      {lancTruncado && (
+        <Alert tom="warning" titulo="Alguns lançamentos ficaram de fora dos indicadores">
+          A janela do fluxo tem mais de <strong>1000</strong> lançamentos (teto do banco), então os cards
+          A pagar/A receber/Atrasados podem estar sub-contando. Use as telas de Contas a Pagar/Receber
+          (com filtros) para os números completos.
+        </Alert>
+      )}
 
       {/* ══ HERO — assinatura: resultado do mês + a liberar (Hotmart) ══ */}
       <Card className="p-6">

@@ -257,6 +257,11 @@ export default function Hotmart() {
     const nome = `hotmart_${(empresaAtiva?.name ?? 'todas').replace(/\s+/g, '-')}`
     if (formato === 'xlsx') exportTabelaXLSX(header, linhas, nome, 'Hotmart').catch(console.error)
     else exportTabelaCSV(header, linhas, nome)
+    // aviso honesto: a grade carrega no máx. 1000; os KPIs (hotmart_totals) cobrem TODAS. Se o
+    // período tem mais que o carregado, o arquivo sai parcial — diz isso em vez de enganar.
+    if (!buscaDebounced.trim() && totais.qtd > vendas.length) {
+      setMsg(`Exportadas ${vendas.length} vendas (as mais recentes carregadas), de ${totais.qtd} no período. Para exportar todas, refine o período/empresa ou use a busca.`)
+    }
   }
 
   return (
@@ -332,7 +337,7 @@ export default function Hotmart() {
         <KPICard label="Líquido" valor={fmtBRL(totais.liquido)} tom="revenue" />
       </div>
       <p className={`text-xs text-fg-subtle ${totais.foraMoeda > 0 ? 'mb-3' : 'mb-6'}`}>
-        Valor Total = pago pelos compradores (com juros de parcelamento) · Bruto = preço dos produtos (sem juros) · Líquido = bruto − taxas.
+        Valor Total = pago pelos compradores (com juros de parcelamento) · Bruto = preço dos produtos (sem juros) · Líquido = bruto − taxas − afiliados/coprodução (repasse ao produtor).
       </p>
       {totais.foraMoeda > 0 && (
         <div className="mb-6">

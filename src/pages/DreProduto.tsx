@@ -5,7 +5,7 @@ import { useApp } from '../contexts/AppContext'
 import { fmtBRL } from '../lib/format'
 import { exportTabelaCSV, exportTabelaXLSX } from '../lib/exportTabela'
 import type { DreProduct } from '../lib/types'
-import { Card, PageHeader, ErroBanner, Vazio, KPICard, KPIStrip, Button, inputCls } from '../components/ui'
+import { Card, PageHeader, ErroBanner, Vazio, KPICard, KPIStrip, Button, Alert, inputCls } from '../components/ui'
 
 // DRE gerencial POR PRODUTO (modelo do contador, aba "DRE Gerencial"): produtos
 // nas colunas. Acima da Margem rateia por produto (receita/deduções/custos var,
@@ -35,22 +35,30 @@ export default function DreProduto() {
   const [produtos, setProdutos] = useState<DreProduct[]>([])
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [naoClass, setNaoClass] = useState<{ qtd: number; valor: number; qtdTx: number; valorTx: number } | null>(null)
 
   const carregar = useCallback(async () => {
     if (!empresaAtiva?.id) return
     setCarregando(true)
     setErro(null)
-    const [r1, r2] = await Promise.all([
+    const [r1, r2, nc] = await Promise.all([
       supabase.rpc('dre_by_product', {
         p_company: empresaAtiva.id, p_year: ano,
         p_month_from: Math.min(mesDe, mesAte), p_month_to: Math.max(mesDe, mesAte),
       }),
       supabase.from('dre_products').select('*').eq('active', true).order('sort_order'),
+      // lançamentos sem Plano de Contas somem da DRE por produto (JOIN inner) — mesmo alerta da
+      // DRE por competência (RPC server-side, evita o teto de 1000). Conta entries E cartão.
+      supabase.rpc('dre_nao_classificado', { p_company: empresaAtiva.id }),
     ])
     setCarregando(false)
     if (r1.error) { setErro('Erro ao carregar a DRE por produto: ' + r1.error.message); setDados([]); return }
     setDados((r1.data as Linha[]) ?? [])
     setProdutos((r2.data as DreProduct[]) ?? [])
+    const r = (nc.data as { qtd_entries: number; valor_entries: number; qtd_tx: number; valor_tx: number }[] | null)?.[0]
+    const qtdTx = Number(r?.qtd_tx ?? 0), valorTx = Number(r?.valor_tx ?? 0)
+    const qtd = Number(r?.qtd_entries ?? 0) + qtdTx, valor = Number(r?.valor_entries ?? 0) + valorTx
+    setNaoClass(qtd > 0 ? { qtd, valor, qtdTx, valorTx } : null)
   }, [empresaAtiva, ano, mesDe, mesAte])
 
   useEffect(() => { carregar() }, [carregar])
@@ -150,6 +158,22 @@ export default function DreProduto() {
       />
 
       <ErroBanner mensagem={erro} />
+
+      {/* Lançamentos sem Plano de Contas somem desta DRE também (JOIN inner) — mesmo aviso da por competência */}
+      {!carregando && naoClass && (
+        <div className="mb-4">
+          <Alert tom="warning" titulo="Lançamentos fora desta DRE">
+            <strong className="tnum">{naoClass.qtd}</strong> lançamento(s) desta empresa, somando{' '}
+            <strong className="tnum">{fmtBRL(naoClass.valor)}</strong>, estão <strong>sem Plano de Contas</strong> e
+            não entram na DRE por produto.
+            {naoClass.qtdTx > 0 && (
+              <> Destes, <strong className="tnum">{naoClass.qtdTx}</strong> são de <strong>cartão</strong>{' '}
+              (<strong className="tnum">{fmtBRL(naoClass.valorTx)}</strong>) — classifique na aba Lançamentos da Fatura.</>
+            )}
+            {' '}Os demais, em Contas a Pagar/Receber (campo "Conta do Plano de Contas").
+          </Alert>
+        </div>
+      )}
 
       <Card className="p-4 mb-4">
         <div className="flex flex-wrap items-end gap-4">
