@@ -76,7 +76,9 @@ function mapSale(it: any, companyId: string) {
   const total = Number(p.price?.value ?? 0)                          // valor total pago (com juros de parcelamento)
   const gross = Number(p.hotmart_fee?.base ?? p.price?.value ?? 0)   // bruto: preço base do produto (sem juros)
   const fee = Number(p.hotmart_fee?.total ?? 0)
-  const net = gross - fee                                            // líquido aproximado (refresh_commissions sobrescreve com o PRODUCER exato)
+  // net_amount NÃO sai daqui: o sync gross-fee re-clobbrava o líquido correto (PRODUCER =
+  // gross-fee-afiliado-coprodução) das vendas com afiliado. Coluna tem default 0; a cron
+  // refresh_commissions é a DONA do net (deterministico/PRODUCER). Venda nova = default até a cron.
 
   return {
     transaction_code: String(code),
@@ -89,7 +91,6 @@ function mapSale(it: any, companyId: string) {
     hotmart_fee: fee,
     fee_percentage: p.hotmart_fee?.percentage ?? null, // % cobrada pela Hotmart
     installments: p.payment?.installments_number ?? null, // nº de parcelas (1 = à vista)
-    net_amount: net,
     payment_method: p.payment?.type ?? null,
     status: String(p.status ?? 'UNKNOWN'),
     buyer: it?.buyer?.name ?? null,
@@ -121,7 +122,7 @@ Deno.serve(async (req) => {
       if (uErr || !user) return json({ error: 'sem autorização' }, 401)
     }
 
-    const { company_id, debug, refresh_sck, refresh_status, refresh_commissions, months, start: startArg, end: endArg, all_history } = await req.json().catch(() => ({}))
+    const { company_id, debug, refresh_sck, refresh_status, refresh_commissions, months, start: startArg, end: endArg, all_history, inspect_commissions } = await req.json().catch(() => ({}))
     if (!company_id) return json({ error: 'company_id obrigatório' }, 400)
 
     const clientId = Deno.env.get('HOTMART_CLIENT_ID')
@@ -136,6 +137,27 @@ Deno.serve(async (req) => {
     const tokenJson = await tokenRes.json()
     const accessToken = tokenJson.access_token
     if (!accessToken) return json({ error: 'token Hotmart sem access_token', body: tokenJson }, 502)
+
+    // modo INSPECT (SÓ serviço, READ-ONLY): busca /sales/commissions de transaction_codes
+    // específicos e devolve o breakdown cru (source/value/user) + o que está no banco, SEM gravar.
+    // Serve pra auditar o net_amount (a linha PRODUCER é o líquido real; se ausente, comissão pendente).
+    if (inspect_commissions) {
+      if (!isService) return json({ error: 'inspect_commissions é só modo-serviço' }, 403)
+      const codes: string[] = (Array.isArray(inspect_commissions) ? inspect_commissions : []).slice(0, 20).map(String)
+      const sbsvc = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey!)
+      const out: unknown[] = []
+      for (const code of codes) {
+        const u = new URL(HOTMART_COMMISSIONS_URL)
+        u.searchParams.set('transaction', code)
+        const r = await fetch(u.toString(), { headers: { Authorization: `Bearer ${accessToken}` } })
+        const comms = r.ok ? ((await r.json())?.items?.[0]?.commissions ?? []) : null
+        const { data: sale } = await sbsvc.from('hotmart_sales')
+          .select('gross_amount, hotmart_fee, net_amount, affiliate_commission, coproduction_commission')
+          .eq('transaction_code', code).maybeSingle()
+        out.push({ code, http_ok: r.ok, comissoes: comms ? comms.map((x: any) => ({ source: x?.source, value: x?.commission?.value, user: x?.user?.name })) : null, banco: sale })
+      }
+      return json({ inspect: true, resultado: out })
+    }
 
     // 1a-ter) modo refresh_sck (SÓ serviço): backfill do TRACKING nas vendas
     //   EXISTENTES. A API /sales/history traz purchase.tracking = { source_sck (=sck
@@ -193,7 +215,7 @@ Deno.serve(async (req) => {
       const recente = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
       const { data: cands, error: eSel } = await sbsvc
         .from('hotmart_sales')
-        .select('transaction_code')
+        .select('transaction_code, gross_amount, hotmart_fee')
         .eq('company_id', company_id)
         .or(`commission_checked_at.is.null,sale_date.gte.${recente}`)
         .order('commission_checked_at', { ascending: true, nullsFirst: true })
@@ -219,14 +241,17 @@ Deno.serve(async (req) => {
         const afi = val(isAff)
         const cop = val(isCop)
         const prod = comms.find((x) => /^producer$/i.test(String(x?.source ?? '')))
-        const patch: Record<string, unknown> = {
-          commission_checked_at: agora,
-          affiliate_commission: afi,
-          affiliate: afi > 0 ? nome(isAff) : null,
-          coproduction_commission: cop,
-          coproducer: cop > 0 ? nome(isCop) : null,
+        // resposta VAZIA (transitória, comissão não liquidada) → só marca checado, NÃO zera o que
+        // já capturamos. Não-vazia → grava afiliado/coprod + o líquido: PRODUCER (o que o produtor
+        // recebe) quando vier, senão a fórmula bruto-taxa-afi-cop (idênticos p/ RB7 — validado).
+        const patch: Record<string, unknown> = { commission_checked_at: agora }
+        if (comms.length > 0) {
+          patch.affiliate_commission = afi
+          patch.affiliate = afi > 0 ? nome(isAff) : null
+          patch.coproduction_commission = cop
+          patch.coproducer = cop > 0 ? nome(isCop) : null
+          patch.net_amount = prod ? Number(prod?.commission?.value ?? 0) : (Number(c.gross_amount) - Number(c.hotmart_fee) - afi - cop)
         }
-        if (prod) patch.net_amount = Number(prod?.commission?.value ?? 0) // líquido exato
         if (afi > 0) comAfiliado++
         await sbsvc.from('hotmart_sales').update(patch).eq('transaction_code', c.transaction_code)
         verificados++

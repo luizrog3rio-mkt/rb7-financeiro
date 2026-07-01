@@ -174,9 +174,18 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   AFFILIATE/PRODUCER/COPRODUCER; ver [[hotmart-sales-commissions-shape]]). O modo
   `refresh_commissions` da edge function (dirigido pelo banco, rodízio por
   `commission_checked_at`) preenche `affiliate`/`affiliate_commission`/
-  `coproducer`/`coproduction_commission`/`net_amount` (= PRODUCER) — e por isso
-  o `mapSale` do sync diário NÃO emite essas 4 colunas (defaults 0/NULL as cobrem),
-  só `net_amount` aproximado. Total por afiliado: RPC `hotmart_by_affiliate`.
+  `coproducer`/`coproduction_commission`/`net_amount` — e por isso
+  o `mapSale` do sync diário NÃO emite essas colunas (defaults 0/NULL as cobrem).
+  ⚠️ **`net_amount` (líquido) é DONO EXCLUSIVO do `refresh_commissions`** (auditoria
+  2026-06-30 + edge v24): o `mapSale` NÃO emite mais `net_amount` (coluna tem `default 0`;
+  venda nova = 0 até a cron) — antes emitia `bruto−taxa` e **re-clobbrava** o líquido correto
+  das vendas com afiliado (~145 vendas / R$20,7k infladas — o afiliado SAI do pagamento do
+  produtor, confirmado: PRODUCER = bruto−taxa−afiliado−coprodução). O `refresh_commissions`
+  agora grava `net_amount = PRODUCER` quando vem, **senão a fórmula `bruto−taxa−afi−cop`**
+  (idênticos p/ RB7, validado por inspeção da API), e SÓ quando o array de comissões vem
+  não-vazio (resposta vazia transitória só marca `commission_checked_at`, não zera). Modo
+  **`inspect_commissions:[codes]`** (só serviço, READ-ONLY): devolve o breakdown cru da API +
+  o do banco, sem gravar — pra auditar o líquido. Total por afiliado: RPC `hotmart_by_affiliate`.
 - **Moeda**: coluna `currency` (`price.currency_code`); a base tem vendas USD/
   EUR/PYG/etc. A RPC `hotmart_totals` filtra `currency='BRL'` (default) e
   devolve `fora_moeda` (nº excluído) — **nunca somar moedas diferentes** (5
