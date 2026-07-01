@@ -271,8 +271,16 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   recebendo eventos reais; verificado na auditoria 2026-06-30: 305 eventos
   recebidos — PURCHASE_COMPLETE/APPROVED/REFUNDED/CANCELED + SUBSCRIPTION_CANCELLATION
   — e os 23 PURCHASE_REFUNDED já refletidos como REFUNDED/CHARGEBACK em
-  `hotmart_sales`; derivação inline + drain operando com 0 falhas. **NÃO re-ativar**
-  — recadastrar/trocar hottok/redeploy só quebra ou duplica entregas):
+  `hotmart_sales`; derivação inline + drain operando com 0 falhas. ⚠️ **`PURCHASE_CANCELED` e
+  `SUBSCRIPTION_CANCELLATION` DESCADASTRADOS no painel (2026-07-01, decisão do Luiz):** hoje só
+  interessam COMPLETE/APPROVED/REFUNDED. Eram ruído — as 21 `PURCHASE_CANCELED` nunca tinham sido
+  aprovadas (compras mortas no funil, R$8.279,26 SEMPRE fora da allowlist → 0 inflação de receita) e
+  só viravam "vendas fantasma" `CANCELED` em `hotmart_sales`; `SUBSCRIPTION_CANCELLATION` (cancelamento
+  de assinatura, sem `transaction_code`) era skip inerte. Descadastro feito EDITANDO a config existente
+  (hottok/URL intactos — jamais recriar). No mesmo dia foram APAGADOS do banco: 21 vendas `CANCELED`
+  (rastro no `deletions_log`) + 1 `hotmart_sale_class` de regra + 30 eventos crus (sem rastro, tabela
+  sem trigger). **NÃO re-ativar**
+  — recadastrar/trocar hottok/redeploy só quebra ou duplica entregas; nem re-cadastrar os 2 eventos removidos):
   Edge Function **`hotmart-webhook`** (`verify_jwt=false`) valida o
   `hottok` (header `x-hotmart-hottok`, tempo constante) → grava o evento CRU
   durável em `hotmart_webhook_events` (service-only, PII; `dedupe_key` UNIQUE
@@ -288,7 +296,9 @@ runbook `supabase/MIGRATIONS.md`). Mapas históricos da portagem em
   gravava esse skip no `process_error` → 9 eventos "com erro" que não eram falha (escondiam um erro
   DE VERDADE no meio; o drain não os re-tenta, `processed_at` já setado). Agora o branch `v_tx is
   null` só dá `return` (o tipo fica em `event`). Monitorar por `process_error is not null` = falhas
-  reais (hoje 0); "skip" = `processed_at not null and transaction_code is null`.
+  reais (hoje 0); "skip" = `processed_at not null and transaction_code is null`. (Desde o descadastro
+  de 2026-07-01 o `SUBSCRIPTION_CANCELLATION` não chega mais — a lógica de skip fica como
+  defesa-em-profundidade p/ qualquer evento futuro sem `transaction_code`.)
   Tripla rede: inline → drain → crons da API. **Anti-regressão de estorno por
   TRIGGER** `trg_hotmart_status_guard` (congela REFUNDED/CHARGEBACK contra QUALQUER
   writer — webhook, sync e `refresh_status`); status canônico vem do `event`
