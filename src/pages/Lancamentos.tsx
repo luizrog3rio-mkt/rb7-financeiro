@@ -315,6 +315,16 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
       setSalvando(false)
       return
     }
+    if (!form.issue_date) {
+      setErro('Informe a "Data de emissão" — campo obrigatório.')
+      setSalvando(false)
+      return
+    }
+    if (!form.competency_date) {
+      setErro('Informe a "Data de Competência" — campo obrigatório.')
+      setSalvando(false)
+      return
+    }
     const status = form.status
     const payment_date = status === 'paid' && !form.payment_date ? hoje() : form.payment_date || null
     // dia-âncora da recorrência: novo lançamento ou alteração do vencimento
@@ -583,6 +593,14 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
   // conta de B). É legítimo por design (decisão do Luiz 2026-06-30) — só sinaliza, não bloqueia.
   const intercompany = useMemo(
     () => lancamentosExibidos.filter((l) => l.account && l.account.company_id !== l.company_id),
+    [lancamentosExibidos]
+  )
+
+  // incompletos: sem Conta DRE (some da DRE) e/ou sem Data de emissão (campos
+  // obrigatórios no form novo, mas lançamentos antigos/importados podem faltar) —
+  // transferência é neutra por design, não entra aqui.
+  const incompletos = useMemo(
+    () => lancamentosExibidos.filter((l) => !l.transfer_id && (!l.chart_of_account_id || !l.issue_date)),
     [lancamentosExibidos]
   )
 
@@ -899,6 +917,15 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
         </div>
       )}
 
+      {incompletos.length > 0 && (
+        <div className="mb-4">
+          <Alert tom="warning">
+            {incompletos.length} {incompletos.length === 1 ? 'lançamento está' : 'lançamentos estão'} sem Conta DRE e/ou Data de emissão
+            {' '}({fmtBRL(incompletos.reduce((s, l) => s + Number(l.amount), 0))}) — complete os dois campos, senão distorce a DRE.
+          </Alert>
+        </div>
+      )}
+
       <Card className="p-4 mb-4">
         <div className="flex flex-wrap items-end gap-4">
           <div className="w-64">
@@ -1043,13 +1070,13 @@ export default function Lancamentos({ tipo }: { tipo: EntryType }) {
               <input required inputMode="decimal" className={inputCls} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Data de emissão</label>
-              <input type="date" className={inputCls} value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
+              <label className="block text-sm font-medium mb-1">Data de emissão *</label>
+              <input type="date" required className={inputCls} value={form.issue_date} onChange={(e) => setForm({ ...form, issue_date: e.target.value })} />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Data de Competência</label>
-              <input type="date" className={inputCls} value={form.competency_date} onChange={(e) => setForm({ ...form, competency_date: e.target.value })} />
-              <p className="text-xs text-fg-subtle mt-0.5">Usada na DRE. Se vazia, usa a data de emissão.</p>
+              <label className="block text-sm font-medium mb-1">Data de Competência *</label>
+              <input type="date" required className={inputCls} value={form.competency_date} onChange={(e) => setForm({ ...form, competency_date: e.target.value })} />
+              <p className="text-xs text-fg-subtle mt-0.5">Usada na DRE por competência.</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Vencimento *</label>
