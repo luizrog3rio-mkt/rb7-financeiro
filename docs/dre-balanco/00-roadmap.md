@@ -28,7 +28,8 @@
 |---|---|---|---|
 | **1. Estrutura do plano por empresa** | `company_id`+`tipo`+`redutora` em `chart_of_accounts` | não | ✅ **APLICADA 2026-07-15** (`20260715173423`) |
 | **2a. Balanço Digital** | 50 contas patrimoniais (Ativo/Passivo/PL) + filtro `tipo=resultado` na DRE + seletores de front | não | ✅ **APLICADA 2026-07-15** (`20260715215959`) |
-| **2b/2c. Balanço Holding + Incorporadora** | contas patrimoniais + DRE Holding (receita de participações) + custo de obra | não | ⏳ próximo |
+| **2b. Balanço Holding** | 14 contas patrimoniais (investimentos nas participadas) | não | ✅ **APLICADA 2026-07-15** (`20260715220733`) |
+| **2c. Balanço Incorporadora** | 11 contas (enxuto derivado; inclui `Estoque de obras em andamento`) | não | ✅ **APLICADA 2026-07-15** (`20260715220938`) |
 | **3. Saneamento de datas** | backfill + `issue_date`/`competency_date` NOT NULL (problema #3 da reunião) | não | ✅ **APLICADA 2026-07-15** (`20260715192144`) |
 | **4a. Obras — estrutura** | tabela `obras` (em_andamento→vendida) + `entries.obra_id` + seed Cristais/Alfenas | não | ✅ **APLICADA 2026-07-15** (`20260715200047`) · marcação dos ~135 lançamentos adiada (a revisar) |
 | **4b. Obras — estoque + venda** | conta de estoque (ativo) + evento de venda (reclassif. → CPV) + DRE Incorporadora por obra | **sim** (contas patrimoniais da Fase 2) | ⏳ |
