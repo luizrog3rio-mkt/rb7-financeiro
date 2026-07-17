@@ -26,6 +26,7 @@ export default defineConfig({
         'src/lib/importarExtrato.ts',
         'src/lib/importarFatura.ts',
         'src/lib/ofxExtrato.ts',
+        'src/lib/permissions.ts',
         'src/lib/regra.ts',
       ],
       thresholds: {

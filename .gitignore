@@ -9,3 +9,6 @@ coverage
 .vercel/
 supabase/.temp/
 .playwright-mcp/
+playwright/.auth/
+playwright-report/
+test-results/

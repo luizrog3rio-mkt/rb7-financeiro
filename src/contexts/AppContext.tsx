@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Company, Profile } from '../lib/types'
+import { isAdminProfileForUser } from '../lib/permissions'
 
 interface AppCtx {
   session: Session | null
@@ -75,7 +76,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })
   }, [session, recarregarPendentes, recarregarEmpresas])
 
-  const isAdmin = perfil?.role !== 'viewer'
+  // Fail closed: perfil ausente, inválido ou ainda pertencente à sessão anterior
+  // nunca libera controles administrativos enquanto o perfil atual carrega.
+  const isAdmin = isAdminProfileForUser(perfil, session?.user.id)
 
   return (
     <Ctx.Provider

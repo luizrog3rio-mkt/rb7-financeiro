@@ -60,6 +60,21 @@ npm run test:run
 npm run test:coverage
 npm run lint
 npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+O CI executa o login público e contratos autenticados de admin/viewer contra
+respostas simuladas, sem tocar no banco real. O smoke autenticado em produção é
+opcional e usa um estado local ignorado pelo Git (nunca salve credenciais no
+repositório):
+
+```powershell
+npx playwright codegen https://categorizador-fatura.vercel.app --save-storage=playwright/.auth/admin.json
+$env:E2E_BASE_URL='https://categorizador-fatura.vercel.app'
+$env:E2E_AUTH_STATE='playwright/.auth/admin.json'
+$env:E2E_EXPECTED_ROLE='admin'
+npm run test:e2e
 ```
 
 ## Deploy

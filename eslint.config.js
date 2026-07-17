@@ -7,7 +7,7 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
   // supabase/functions roda em Deno (Edge Function) — fora da config web
-  globalIgnores(['dist', 'supabase/functions']),
+  globalIgnores(['dist', 'coverage', 'playwright-report', 'test-results', 'supabase/functions']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
