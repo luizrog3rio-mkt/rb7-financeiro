@@ -48,7 +48,7 @@
 | **6f. Apropriação de mentorias** | grade mensal por venda/produto, auditoria e DRE sem dupla contagem | 🔴 **regra do contador** | ⏳ bloqueado |
 | **6d. Balanço com saldos** | RPC/tela de Balanço + **saldos de abertura** (Capital, imobilizado, caixa inicial) | 🔴 **dado do contador** | ⏳ bloqueado |
 | **7. Consolidada** | intercompany + eliminações (regras 2/3/4 já dá; regra 1 espera equivalência) | **sim** (regra 1) | ⏳ |
-| **8. Plano de contas POR EMPRESA** | fim das 106 compartilhadas: Digital herda; Incorporadora/Participações ganham o plano da planilha; Molho/Pessoal mínimos; 79 entries remapeados (natureza preservada) + 15 patrimoniais consertados | não | 🟡 **SQL pronto + dry-run OK** (`20990101000000_separacao_plano_de_contas_por_empresa.sql`) — aguarda aprovação do Luiz |
+| **8. Plano de contas POR EMPRESA** | fim das 106 compartilhadas: Digital herda; Incorporadora/Participações ganham o plano da planilha; Molho/Pessoal mínimos; 79 entries remapeados (natureza preservada) + 15 patrimoniais consertados | não | ✅ **APLICADA 2026-07-18** (`20260718195836`) · 5 itens devolvidos pra fila (4 Incorporadora + 1 DARF Participações) |
 
 Cada fase deixa o app **de pé** e entra como migration revisada + (quando houver) ajuste de front.
 Nada de DROP do modelo antigo antes do portão F5 verde.

@@ -71,6 +71,9 @@ financeiro), `1.8→1.2.03 Outras receitas`.
 
 ## Migration
 
-`supabase/migrations/20990101000000_separacao_plano_de_contas_por_empresa.sql`
-(version placeholder — **NÃO APLICADA**; aguarda aprovação do Luiz; rito: `apply_migration`
-via MCP → renomear com o version real → anotar APLICADA no header).
+`supabase/migrations/20260718195836_separacao_plano_de_contas_por_empresa.sql` —
+**APLICADA em 2026-07-18** após aprovação do Luiz ("Pode aplicar"). Contagens do apply
+idênticas às do dry-run. Smoke pós-apply no banco vivo: 0 contas sem empresa; 0 entries e
+0 partidas de resultado cruzando empresa; planos de resultado = Digital 105 (106 − 4.6),
+Incorporadora 20 (19 novas + 4.6 movida), Participações 22, Molho 7, Conta Pessoal 18;
+patrimoniais inalteradas (50/13/14/4); 10 regras de sugestão, todas com empresa.

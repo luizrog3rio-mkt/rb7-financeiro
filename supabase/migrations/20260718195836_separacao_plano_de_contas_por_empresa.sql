@@ -1,7 +1,7 @@
 -- Migration: separacao_plano_de_contas_por_empresa
--- STATUS: NAO APLICADA — aguardando revisão e aprovação do Luiz (regra-mãe do projeto).
--- DRY-RUN 2026-07-18: o bloco inteiro foi executado em produção com rollback proposital
--- (exceção no fim) — todas as guardas passaram. Contagens do dry-run:
+-- STATUS: APLICADA em 2026-07-18, version 20260718195836 (SQL revisado e aprovado pelo Luiz).
+-- DRY-RUN prévio no mesmo dia: o bloco inteiro foi executado em produção com rollback
+-- proposital (exceção no fim) — todas as guardas passaram. Contagens (dry-run = apply):
 --   entries_remapeados=79 · partidas_remapeadas=32 · pes_consorcio=1 · pes_movpessoais=9
 --   · devolvidos_fila=5 · regras_clonadas=6
 --
