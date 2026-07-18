@@ -129,30 +129,29 @@ evitando que a capitalização pareça completa quando a contrapartida do razão
 O Luiz assumiu as decisões que antes seriam respondidas pelo contador. A migration
 `20260718161547_fechamento_obras_e_conta_pessoal.sql` foi revisada, aprovada e aplicada via MCP.
 
-Tratamento proposto:
+Tratamento aplicado, já considerando a regra posterior de não inferir:
 
-- Capitalizar os 53 custos com obra explícita e mais 5 itens inferidos, totalizando 58
-  lançamentos e R$ 134.172,06 em `1.2 Estoque de obras em andamento`.
-- Destino final: Alfenas 34 itens/R$ 56.676,31; Cristais 24 itens/R$ 77.495,75.
+- Capitalizar os 53 custos com obra explícita e mais 3 itens com evidência direta, totalizando
+  56 lançamentos e R$ 117.772,06 em `1.2 Estoque de obras em andamento`.
+- Destino atual: Alfenas 34 itens/R$ 56.676,31; Cristais 22 itens/R$ 61.095,75.
 - Evidência direta: SANECAMP e Paraíba Ferragens têm histórico com `Casas Cristais`; Leal
   Gesso tem histórico com `Casas Alfenas`.
-- Inferência operacional a revisar: Madeireira do Zetinho e G4 Construções foram direcionadas
-  a Cristais por serem materiais estruturais no período em que Cristais estava nessa fase e
-  Alfenas aparecia nos lançamentos de acabamento.
+- Madeireira do Zetinho e G4 Construções não têm evidência suficiente: voltaram para
+  `A classificar` pela migration `20260718163057_devolver_inferencias_para_ui.sql`.
 - Classificar as cinco parcelas da betoneira, R$ 5.031,63, em `1.4.01 Máquinas e equipamentos`.
 - Na conta pessoal, classificar os 3 consórcios/R$ 5.230,00 como ativo e os outros 24
   itens/R$ 94.600,71 como `Movimentações pessoais do titular`, redutora do patrimônio líquido.
 - Não inventar conta pagadora: apenas os cinco custos de obra que já têm `account_id` recebem
-  partidas completas. Os demais continuam com a contrapartida pendente e visível.
+  partidas completas. Os outros 51 continuam com a contrapartida pendente e visível.
 
-Impacto previsto em abril-junho: NC-2 cai de 87 itens/R$ 236.011,81 para zero e o resultado
-consolidado sobe no mesmo valor, pois estoque, imobilizado e gastos pessoais deixam a DRE.
+Impacto atual em abril-junho: NC-2 caiu de 87 itens/R$ 236.011,81 para 2 itens/R$ 16.400,00,
+e o resultado consolidado subiu R$ 219.611,81. Os dois itens restantes ficam para a UI.
 
 ### Smoke pós-aplicação
 
-- NC-2 abril-junho: zero itens e R$ 0 nas duas empresas.
-- Alfenas: 34 lançamentos/R$ 56.676,31; Cristais: 24/R$ 77.495,75.
+- NC-2 abril-junho: 2 itens/R$ 16.400,00 na Incorporadora; zero na Conta Pessoal.
+- Alfenas: 34 lançamentos/R$ 56.676,31; Cristais: 22/R$ 61.095,75.
 - Betoneira: 5 parcelas/R$ 5.031,63 em `1.4.01 Máquinas e equipamentos`.
 - Conta pessoal: 3 consórcios/R$ 5.230,00 em ativo; 24 movimentos/R$ 94.600,71 em redutora do PL.
 - Partidas de obra: 5 pares, débito = crédito = R$ 12.404,18; zero lançamentos desbalanceados.
-- Versão registrada no banco: `20260718161547`.
+- Versões registradas no banco: `20260718161547` e ajuste `20260718163057`.
