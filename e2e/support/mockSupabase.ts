@@ -22,6 +22,8 @@ function json(route: Route, body: unknown, headers: Record<string, string> = {})
 export async function mockAuthenticatedSupabase(page: Page, role: Role): Promise<void> {
   const userId = `user-${role}`
   const now = new Date().toISOString()
+  let contrapartidaObraDefinida = false
+  let obraVendida = false
 
   await page.addInitScript(
     ({ storageKey, session }) => localStorage.setItem(storageKey, JSON.stringify(session)),
@@ -65,6 +67,7 @@ export async function mockAuthenticatedSupabase(page: Page, role: Role): Promise
         id: 'account-1', company_id: 'company-1', name: 'Conta Corrente', type: 'checking',
         bank: 'Sicoob', initial_balance: 0, counterparty_company_id: null,
         statement_closing_day: null, due_day: null, active: true, created_at: now,
+        conta_contabil_id: 'coa-caixa', company: { name: 'RB7 DIGITAL' },
       }])
     }
     if (path.endsWith('/chart_of_accounts')) {
@@ -89,16 +92,42 @@ export async function mockAuthenticatedSupabase(page: Page, role: Role): Promise
     if (path.endsWith('/entries_atrasados')) return json(route, 0)
     if (path.endsWith('/custo_por_obra')) {
       return json(route, [{
-        obra_id: 'obra-1', obra: 'Alfenas', status: 'em_andamento', data_venda: null,
-        conta_code: '(sem conta)', conta_name: '(a classificar)', valor: 0, qtd: 0,
+        obra_id: 'obra-1', obra: 'Alfenas', status: obraVendida ? 'vendida' : 'em_andamento',
+        data_venda: obraVendida ? isoDate() : null,
+        conta_code: '1.2', conta_name: 'Estoque de obras em andamento', valor: 1_500, qtd: 1,
       }])
     }
     if (path.endsWith('/obra_candidatos')) {
       return json(route, [{
-        entry_id: 'entry-obra', descricao: 'MATERIAL CASAS ALFENAS', valor: 1_500,
+        entry_id: 'entry-candidato', descricao: 'SERVIÇO CASAS ALFENAS', valor: 900,
         data: isoDate(), empresa: 'RB7 INCORPORADORA', conta_code: null,
         obra_id: 'obra-1', obra_sugerida: 'Alfenas',
       }])
+    }
+    if (path.endsWith('/obra_situacao_contabil')) {
+      return json(route, [{
+        obra_id: 'obra-1', obra: 'Alfenas', status: obraVendida ? 'vendida' : 'em_andamento',
+        data_venda: obraVendida ? isoDate() : null, total_custo: 1_500, qtd_custos: 1,
+        qtd_sem_conta: contrapartidaObraDefinida ? 0 : 1,
+        qtd_sem_partidas: contrapartidaObraDefinida ? 0 : 1,
+        saldo_estoque_razao: obraVendida ? 0 : contrapartidaObraDefinida ? 1_500 : 0,
+        pronta_venda: !obraVendida && contrapartidaObraDefinida,
+        cpv_entry_id: obraVendida ? 'entry-cpv' : null,
+      }])
+    }
+    if (path.endsWith('/obra_contrapartidas_pendentes')) {
+      return json(route, contrapartidaObraDefinida ? [] : [{
+        entry_id: 'entry-obra', obra_id: 'obra-1', obra: 'Alfenas',
+        descricao: 'MATERIAL CASAS ALFENAS', valor: 1_500, data: isoDate(), account_id: null,
+      }])
+    }
+    if (path.endsWith('/definir_conta_pagadora_obra')) {
+      contrapartidaObraDefinida = true
+      return json(route, null)
+    }
+    if (path.endsWith('/finalizar_venda_obra')) {
+      obraVendida = true
+      return json(route, [{ cpv_entry_id: 'entry-cpv', custo: 1_500 }])
     }
     if (path.endsWith('/hotmart_totals')) {
       return json(route, [{ liquido: 125_000, fora_moeda: 0 }])

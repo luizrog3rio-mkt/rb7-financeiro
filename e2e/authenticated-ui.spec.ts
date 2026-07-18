@@ -47,8 +47,23 @@ test('custo por obra evidencia quando falta a conta que pagou', async ({ page })
   await page.goto('/custo-por-obra')
 
   await expect(page.getByRole('heading', { name: 'Custo por Obra' })).toBeVisible()
-  await expect(page.getByText('Sem conta de pagamento', { exact: true })).toBeVisible()
+  await expect(page.getByText('Contrapartidas pendentes', { exact: true })).toBeVisible()
   await expect(page.getByText('Contrapartida do Balanço ainda incompleta')).toBeVisible()
   await expect(page.getByText('MATERIAL CASAS ALFENAS')).toBeVisible()
   await expect(page.getByText('sem conta', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Finalizar venda e reconhecer CPV' })).toBeDisabled()
+})
+
+test('admin informa a conta pela UI e libera o evento de venda da obra', async ({ page }) => {
+  await mockAuthenticatedSupabase(page, 'admin')
+  page.on('dialog', (dialog) => dialog.accept())
+  await page.goto('/custo-por-obra')
+
+  await page.getByLabel('Conta pagadora de MATERIAL CASAS ALFENAS').selectOption('account-1')
+  await page.getByRole('button', { name: 'Salvar' }).click()
+  await expect(page.getByText(/Razão completo:/)).toBeVisible()
+
+  await page.getByLabel('Data da venda').fill(new Date().toISOString().slice(0, 10))
+  await page.getByRole('button', { name: 'Finalizar venda e reconhecer CPV' }).click()
+  await expect(page.getByText(/Estoque baixado e CPV reconhecido/)).toBeVisible()
 })

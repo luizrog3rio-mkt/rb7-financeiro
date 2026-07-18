@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link2 } from 'lucide-react'
+import { CircleDollarSign, Link2, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../contexts/AppContext'
 import { useToast } from '../components/Toast'
 import {
-  PageHeader, Card, KPICard, KPIStrip, Vazio, Alert, ErroBanner, Button, Badge,
+  PageHeader, Card, KPICard, KPIStrip, Vazio, Alert, ErroBanner, Button, Badge, inputCls,
 } from '../components/ui'
 
 // Tela "Custo por Obra" (Fase 4b-1 do roadmap DRE/Balanço). Espelha a aba "Custo por Obra" da
 // planilha: quanto custou cada casa, quebrado por item de custo. Consome 2 RPCs read-only:
 // custo_por_obra (o acumulado) e obra_candidatos (lançamentos cuja descrição nomeia a obra).
 // O vínculo é REVISADO pelo humano — o sistema sugere, ele confirma (o backfill cego foi recusado).
-// ⚠️ Enquanto a obra está em_andamento o custo deverá ser ESTOQUE após aprovação contábil. Isso é a
-// Fase 4b-2 (conta de estoque + evento de venda → CPV); hoje esses lançamentos ainda caem na NC-2.
-// A tela também evidencia a conta de pagamento: sem ela, não há contrapartida segura no razão.
+// O custo em andamento fica em ESTOQUE. A conta pagadora é sempre escolhida pelo humano nesta tela;
+// quando todas as contrapartidas fecham o razão, a venda baixa estoque e reconhece CPV atomicamente.
 
 interface CustoLinha {
   obra_id: string
@@ -42,6 +41,36 @@ interface EntryConta {
   account_id: string | null
   account: { name: string } | { name: string }[] | null
 }
+interface SituacaoObra {
+  obra_id: string
+  obra: string
+  status: string
+  data_venda: string | null
+  total_custo: number
+  qtd_custos: number
+  qtd_sem_conta: number
+  qtd_sem_partidas: number
+  saldo_estoque_razao: number
+  pronta_venda: boolean
+  cpv_entry_id: string | null
+}
+interface ContrapartidaPendente {
+  entry_id: string
+  obra_id: string
+  obra: string
+  descricao: string
+  valor: number
+  data: string | null
+  account_id: string | null
+}
+interface ContaPagadora {
+  id: string
+  name: string
+  company_id: string
+  type: string
+  conta_contabil_id: string
+  company: { name: string } | { name: string }[] | null
+}
 
 const fmtMoeda = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const fmtData = (d: string | null) => (d ? d.split('-').reverse().join('/') : '—')
@@ -56,12 +85,26 @@ export default function CustoPorObra() {
   const [erro, setErro] = useState<string | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [salvando, setSalvando] = useState(false)
+  const [situacoes, setSituacoes] = useState<SituacaoObra[]>([])
+  const [contrapartidas, setContrapartidas] = useState<ContrapartidaPendente[]>([])
+  const [contasPagadoras, setContasPagadoras] = useState<ContaPagadora[]>([])
+  const [contaEscolhida, setContaEscolhida] = useState<Record<string, string>>({})
+  const [datasVenda, setDatasVenda] = useState<Record<string, string>>({})
+  const [salvandoConta, setSalvandoConta] = useState<string | null>(null)
+  const [vendendo, setVendendo] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     setCarregando(true); setErro(null); setSel(new Set())
-    const [cst, cnd] = await Promise.all([
+    const [cst, cnd, sit, ctr, acc] = await Promise.all([
       supabase.rpc('custo_por_obra', { p_company: empresaAtiva?.id ?? null }),
       supabase.rpc('obra_candidatos', { p_company: empresaAtiva?.id ?? null }),
+      supabase.rpc('obra_situacao_contabil', { p_company: empresaAtiva?.id ?? null }),
+      supabase.rpc('obra_contrapartidas_pendentes', { p_company: empresaAtiva?.id ?? null }),
+      supabase.from('accounts')
+        .select('id,name,company_id,type,conta_contabil_id,company:companies(name)')
+        .eq('active', true)
+        .not('conta_contabil_id', 'is', null)
+        .order('name'),
     ])
     if (cst.error) setErro('Erro ao carregar o custo: ' + cst.error.message)
     else setLinhas(((cst.data as CustoLinha[]) ?? []).map((l) => ({ ...l, valor: Number(l.valor), qtd: Number(l.qtd) })))
@@ -89,6 +132,21 @@ export default function CustoPorObra() {
         account_name: contasPorEntry.get(c.entry_id)?.account_name ?? null,
       })))
     }
+    if (sit.error) setErro('Erro ao carregar a situação contábil: ' + sit.error.message)
+    else setSituacoes(((sit.data as SituacaoObra[]) ?? []).map((s) => ({
+      ...s,
+      total_custo: Number(s.total_custo),
+      qtd_custos: Number(s.qtd_custos),
+      qtd_sem_conta: Number(s.qtd_sem_conta),
+      qtd_sem_partidas: Number(s.qtd_sem_partidas),
+      saldo_estoque_razao: Number(s.saldo_estoque_razao),
+    })))
+    if (ctr.error) setErro('Erro ao carregar contrapartidas: ' + ctr.error.message)
+    else setContrapartidas(((ctr.data as ContrapartidaPendente[]) ?? []).map((c) => ({
+      ...c, valor: Number(c.valor),
+    })))
+    if (acc.error) setErro('Erro ao carregar contas pagadoras: ' + acc.error.message)
+    else setContasPagadoras((acc.data as ContaPagadora[]) ?? [])
     setCarregando(false)
   }, [empresaAtiva])
 
@@ -107,10 +165,13 @@ export default function CustoPorObra() {
 
   const custoTotal = useMemo(() => obras.reduce((a, o) => a + o.total, 0), [obras])
   const valorCandidatos = useMemo(() => candidatos.reduce((a, c) => a + c.valor, 0), [candidatos])
-  const semContaPagamento = useMemo(() => candidatos.filter((c) => !c.account_id), [candidatos])
-  const valorSemContaPagamento = useMemo(
-    () => semContaPagamento.reduce((a, c) => a + c.valor, 0),
-    [semContaPagamento],
+  const valorContrapartidas = useMemo(
+    () => contrapartidas.reduce((a, c) => a + c.valor, 0),
+    [contrapartidas],
+  )
+  const situacaoPorObra = useMemo(
+    () => new Map(situacoes.map((s) => [s.obra_id, s])),
+    [situacoes],
   )
 
   const toggle = (id: string) =>
@@ -139,11 +200,41 @@ export default function CustoPorObra() {
     carregar()
   }, [candidatos, sel, toast, carregar])
 
+  const salvarContaPagadora = useCallback(async (entryId: string) => {
+    const accountId = contaEscolhida[entryId]
+    if (!accountId) return
+    setSalvandoConta(entryId); setErro(null)
+    const { error } = await supabase.rpc('definir_conta_pagadora_obra', {
+      p_entry: entryId,
+      p_account: accountId,
+    })
+    setSalvandoConta(null)
+    if (error) { setErro('Erro ao definir conta pagadora: ' + error.message); return }
+    toast('Conta pagadora salva e partida contábil criada.')
+    setContaEscolhida((atual) => { const proximo = { ...atual }; delete proximo[entryId]; return proximo })
+    carregar()
+  }, [contaEscolhida, toast, carregar])
+
+  const finalizarVenda = useCallback(async (obra: { id: string; nome: string; total: number }) => {
+    const data = datasVenda[obra.id]
+    if (!data) { setErro('Informe a data da venda.'); return }
+    if (!window.confirm(`Finalizar a venda de ${obra.nome} e reconhecer ${fmtMoeda(obra.total)} em CPV?`)) return
+    setVendendo(obra.id); setErro(null)
+    const { error } = await supabase.rpc('finalizar_venda_obra', {
+      p_obra: obra.id,
+      p_data_venda: data,
+    })
+    setVendendo(null)
+    if (error) { setErro('Erro ao finalizar venda: ' + error.message); return }
+    toast(`Venda de ${obra.nome} finalizada. Estoque baixado para CPV.`)
+    carregar()
+  }, [datasVenda, toast, carregar])
+
   return (
     <div className="space-y-6">
       <PageHeader
         titulo="Custo por Obra"
-        subtitulo="Quanto custou cada casa, por item de custo. Os lançamentos que nomeiam a obra são sugeridos — você revisa e vincula."
+        subtitulo="Revise custos, informe pela UI qual conta pagou e reconheça o CPV quando a obra for vendida."
       />
       <ErroBanner mensagem={erro} />
 
@@ -151,7 +242,7 @@ export default function CustoPorObra() {
         <KPICard bare label="Obras" valor={carregando ? '…' : obras.length} caption="da empresa selecionada" />
         <KPICard bare label="Custo acumulado" valor={carregando ? '…' : fmtMoeda(custoTotal)} tom="expense" caption="lançamentos já vinculados" />
         <KPICard bare label="A vincular" valor={carregando ? '…' : fmtMoeda(valorCandidatos)} tom="warning" caption={`${candidatos.length} lançamento${candidatos.length === 1 ? '' : 's'} sugerido${candidatos.length === 1 ? '' : 's'}`} />
-        <KPICard bare label="Sem conta de pagamento" valor={carregando ? '…' : semContaPagamento.length} tom="warning" caption={fmtMoeda(valorSemContaPagamento)} />
+        <KPICard bare label="Contrapartidas pendentes" valor={carregando ? '…' : contrapartidas.length} tom="warning" caption={fmtMoeda(valorContrapartidas)} />
       </KPIStrip>
 
       {!carregando && obras.length === 0 && (
@@ -160,16 +251,77 @@ export default function CustoPorObra() {
         </Alert>
       )}
 
-      {!carregando && !isAdmin && candidatos.length > 0 && (
-        <Alert tom="warning" titulo="Só leitura">Seu perfil não pode vincular lançamentos a obras.</Alert>
+      {!carregando && !isAdmin && (candidatos.length > 0 || contrapartidas.length > 0) && (
+        <Alert tom="warning" titulo="Só leitura">Seu perfil pode consultar, mas não pode alterar obras ou contrapartidas.</Alert>
       )}
 
-      {!carregando && semContaPagamento.length > 0 && (
+      {!carregando && contrapartidas.length > 0 && (
         <Alert tom="warning" titulo="Contrapartida do Balanço ainda incompleta">
-          {semContaPagamento.length} lançamentos ({fmtMoeda(valorSemContaPagamento)}) não informam
-          qual conta financeira pagou. O vínculo com a obra pode ser revisado normalmente, mas a
-          capitalização em estoque só fecha no razão depois que a origem do pagamento for definida.
+          {contrapartidas.length} lançamentos ({fmtMoeda(valorContrapartidas)}) ainda precisam da
+          conta que realmente pagou. Escolha abaixo pela UI; nenhuma conta é inferida automaticamente.
         </Alert>
+      )}
+
+      {contrapartidas.length > 0 && (
+        <Card>
+          <div className="px-5 pt-4 pb-3 border-b border-border">
+            <h3 className="font-medium text-fg">Contas pagadoras pendentes</h3>
+            <p className="text-xs text-fg-subtle mt-0.5">Selecione a conta real. Ao salvar, o sistema cria D Estoque / C Caixa ou obrigação.</p>
+          </div>
+          <div className="max-h-[60vh] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-surface">
+                <tr className="text-left text-xs text-fg-subtle border-b border-border">
+                  <th className="px-3 py-2 font-medium">Obra</th>
+                  <th className="px-2 py-2 font-medium">Descrição</th>
+                  <th className="px-2 py-2 font-medium">Data</th>
+                  <th className="px-2 py-2 font-medium text-right">Valor</th>
+                  <th className="px-3 py-2 font-medium min-w-72">Conta que pagou</th>
+                  {isAdmin && <th className="px-3 py-2 w-24" />}
+                </tr>
+              </thead>
+              <tbody>
+                {contrapartidas.map((c) => (
+                  <tr key={c.entry_id} className="border-b border-border/50 last:border-0">
+                    <td className="px-3 py-2"><Badge tom="brand">{c.obra}</Badge></td>
+                    <td className="px-2 py-2 text-fg">{c.descricao}</td>
+                    <td className="px-2 py-2 text-fg-muted tnum">{fmtData(c.data)}</td>
+                    <td className="px-2 py-2 text-right tnum text-fg">{fmtMoeda(c.valor)}</td>
+                    <td className="px-3 py-2">
+                      {isAdmin ? (
+                        <select
+                          className={inputCls}
+                          aria-label={`Conta pagadora de ${c.descricao}`}
+                          value={contaEscolhida[c.entry_id] ?? c.account_id ?? ''}
+                          onChange={(e) => setContaEscolhida((atual) => ({ ...atual, [c.entry_id]: e.target.value }))}
+                        >
+                          <option value="">Selecione…</option>
+                          {contasPagadoras.map((a) => {
+                            const empresa = Array.isArray(a.company) ? a.company[0]?.name : a.company?.name
+                            return <option key={a.id} value={a.id}>{a.name} — {empresa ?? 'empresa'}</option>
+                          })}
+                        </select>
+                      ) : <Badge tom="warning">pendente</Badge>}
+                    </td>
+                    {isAdmin && (
+                      <td className="px-3 py-2 text-right">
+                        <Button
+                          tamanho="sm"
+                          variante="secondary"
+                          loading={salvandoConta === c.entry_id}
+                          disabled={!(contaEscolhida[c.entry_id] ?? c.account_id)}
+                          onClick={() => salvarContaPagadora(c.entry_id)}
+                        >
+                          <Save size={14} /> Salvar
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {/* Custo acumulado por obra */}
@@ -182,11 +334,56 @@ export default function CustoPorObra() {
                 {o.status === 'vendida' ? `vendida ${fmtData(o.data_venda)}` : 'em andamento'}
               </Badge>
               {o.status !== 'vendida' && (
-                <span className="text-xs text-fg-subtle">— deverá virar estoque após aprovação contábil</span>
+                <span className="text-xs text-fg-subtle">— custo mantido em estoque</span>
               )}
             </div>
             <span className="text-lg font-mono tnum text-expense">{fmtMoeda(o.total)}</span>
           </div>
+          {(() => {
+            const situacao = situacaoPorObra.get(o.id)
+            if (!situacao) return null
+            if (o.status === 'vendida') {
+              return (
+                <div className="px-5 py-3 border-b border-border bg-revenue-bg text-sm text-fg-muted">
+                  Estoque baixado e CPV reconhecido em <strong>{fmtData(o.data_venda)}</strong>.
+                </div>
+              )
+            }
+            return (
+              <div className="px-5 py-3 border-b border-border bg-surface-2 flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-medium text-fg">Venda e reconhecimento do CPV</p>
+                  <p className="text-xs text-fg-subtle mt-0.5">
+                    {situacao.pronta_venda
+                      ? `Razão completo: ${fmtMoeda(situacao.saldo_estoque_razao)} disponível para baixa.`
+                      : `Aguardando ${situacao.qtd_sem_partidas} contrapartida${situacao.qtd_sem_partidas === 1 ? '' : 's'} pela UI.`}
+                    {' '}O valor da venda continua sendo lançado em Contas a Receber.
+                  </p>
+                </div>
+                {isAdmin && (
+                  <div className="flex items-end gap-2 flex-wrap">
+                    <label className="text-xs text-fg-muted">
+                      Data da venda
+                      <input
+                        type="date"
+                        className={`${inputCls} mt-1 w-40`}
+                        value={datasVenda[o.id] ?? ''}
+                        onChange={(e) => setDatasVenda((atual) => ({ ...atual, [o.id]: e.target.value }))}
+                      />
+                    </label>
+                    <Button
+                      variante="primary"
+                      loading={vendendo === o.id}
+                      disabled={!situacao.pronta_venda || !datasVenda[o.id]}
+                      onClick={() => finalizarVenda(o)}
+                    >
+                      <CircleDollarSign size={16} /> Finalizar venda e reconhecer CPV
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           {o.itens.length === 0 ? (
             <Vazio mensagem="Nenhum lançamento vinculado ainda — use a lista de sugestões abaixo." />
           ) : (
